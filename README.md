@@ -1,4 +1,6 @@
-# Ganglion — 外置神经模块最小验证系统
+# Ganglion — 外置神经模块最小验证系统 / External Neural Modules — Minimal Validation
+
+> **首次公开发布 / First public release: 2026-09-05 18:23:36 (UTC+8)** — GitLink commit `5e69c52`，GitHub 镜像同日。优先权时间戳详见英文论文 §0。
 
 **Ganglion（神经节）**：生物学上，神经节是位于中枢之外的独立神经处理单元——损坏不致命、宿主照常运行、可移植替换。
 
@@ -39,6 +41,7 @@ ganglion/
   test_ganglion.py   # 13 项单元测试（TDD 先行）
   results.json       # 全部实验数据（40 用例 + 63 项基准行）
   PAPER_GANGLION_CN.md  # 论文草稿（中文版）
+  PAPER_GANGLION_EN.md  # Paper draft (English, with §0 release/priority timestamps)
 ```
 
 ## 快速开始
