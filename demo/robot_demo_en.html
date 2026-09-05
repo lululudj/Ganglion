@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ganglion · Humanoid Robot External Neural Module Demo</title>
+<style>
+  :root{
+    --bg:#05060f; --panel:rgba(16,19,42,.72); --line:rgba(130,140,255,.16);
+    --blue:#6e7bff; --purple:#b369ff; --pink:#ff6ec7; --gold:#ffd76e;
+    --red:#ff5c5c; --grey:#8a93b0; --green:#3ddc97; --txt:#dfe3ff; --dim:#9aa2c8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--txt);
+    font-family:"Segoe UI",Inter,system-ui,sans-serif;min-height:100vh;overflow-x:hidden;}
+  #stars{position:fixed;inset:0;z-index:0;}
+  .wrap{position:relative;z-index:1;max-width:1320px;margin:0 auto;padding:16px 18px 28px;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+  h1{font-size:20px;font-weight:700;
+    background:linear-gradient(90deg,#6e7bff,#b369ff,#ff6ec7,#ffd76e);
+    -webkit-background-clip:text;background-clip:text;color:transparent;}
+  .sub{font-size:12px;color:var(--dim);}
+  .badge{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--line);
+    background:rgba(110,123,255,.08);color:var(--blue);}
+
+  /* Data-plane link bar */
+  .linkbar{display:flex;align-items:center;gap:0;margin-bottom:12px;height:72px;position:relative;}
+  .node{flex:0 0 236px;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:10px 14px;position:relative;z-index:2;backdrop-filter:blur(6px);}
+  .node .nt{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .node .nd{font-size:11px;color:var(--dim);margin-top:3px;line-height:1.5;}
+  .linkzone{flex:1;position:relative;height:100%;z-index:1;}
+  #linkCanvas{position:absolute;inset:0;width:100%;height:100%;}
+  .linkinfo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    font-size:10.5px;color:var(--dim);background:rgba(5,6,15,.75);padding:2px 10px;
+    border-radius:10px;border:1px solid var(--line);white-space:nowrap;z-index:2;}
+  .hb{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);
+    animation:hb 1s infinite alternate;}
+  .hb.dead{background:var(--red);box-shadow:0 0 8px var(--red);animation:none;}
+  .hb.off{background:var(--grey);box-shadow:0 0 6px var(--grey);animation:none;}
+  @keyframes hb{from{opacity:.4}to{opacity:1}}
+  .handshake{font-size:11px;color:var(--gold);margin-top:5px;display:none;}
+  .hsbar{height:4px;background:rgba(255,215,110,.15);border-radius:3px;margin-top:3px;overflow:hidden;display:none;}
+  .hsfill{height:100%;width:0%;background:linear-gradient(90deg,var(--gold),var(--pink));transition:width .1s linear;}
+
+  .main{display:grid;grid-template-columns:1fr 372px;gap:14px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(6px);}
+  .canvasbox{padding:10px;position:relative;}
+  canvas#arena{width:100%;display:block;border-radius:10px;background:#070818;}
+  .narr{margin-top:10px;padding:10px 14px;border-radius:10px;font-size:12.5px;line-height:1.7;
+    background:rgba(110,123,255,.07);border:1px solid var(--line);color:#c6cdf5;min-height:52px;}
+  .narr b{color:var(--gold);}
+
+  .side{display:flex;flex-direction:column;gap:12px;}
+  .sec{padding:12px 14px;}
+  .sec h3{font-size:12.5px;color:var(--dim);font-weight:600;letter-spacing:.5px;margin-bottom:9px;
+    display:flex;justify-content:space-between;align-items:center;}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  button{cursor:pointer;border:1px solid var(--line);background:rgba(110,123,255,.10);
+    color:var(--txt);font-size:12px;padding:8px 6px;border-radius:9px;transition:.18s;
+    font-family:inherit;text-align:center;line-height:1.35;}
+  button:hover:not(:disabled){background:rgba(110,123,255,.24);transform:translateY(-1px);}
+  button:disabled{opacity:.32;cursor:not-allowed;}
+  button.modA{border-color:rgba(179,105,255,.55);background:rgba(179,105,255,.12);}
+  button.modA:hover:not(:disabled){background:rgba(179,105,255,.3);}
+  button.modB{border-color:rgba(255,215,110,.55);background:rgba(255,215,110,.10);}
+  button.modB:hover:not(:disabled){background:rgba(255,215,110,.28);}
+  button.danger{border-color:rgba(255,92,92,.5);background:rgba(255,92,92,.10);}
+  button.danger:hover:not(:disabled){background:rgba(255,92,92,.28);}
+  button.netcut{border-color:rgba(255,110,199,.5);background:rgba(255,110,199,.10);}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--dim);margin-top:9px;}
+  .legend span{display:flex;align-items:center;gap:4px;}
+  .dot{width:9px;height:9px;border-radius:50%;}
+
+  .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+  .stat{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;
+    padding:8px 6px;text-align:center;}
+  .stat .v{font-size:17px;font-weight:700;}
+  .stat .l{font-size:10px;color:var(--dim);margin-top:2px;}
+  .bar{height:8px;border-radius:5px;overflow:hidden;display:flex;margin-top:8px;background:rgba(255,255,255,.05);}
+  .bar div{height:100%;transition:width .3s;}
+  .rtt{font-size:11px;color:var(--dim);margin-top:7px;display:flex;justify-content:space-between;}
+  .rtt b{color:var(--blue);}
+
+  .audit{max-height:168px;overflow-y:auto;font-size:11px;font-family:Consolas,monospace;}
+  .audit div{padding:3px 6px;border-left:2px solid var(--line);margin-bottom:3px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .audit .okA{border-color:var(--purple);color:#cbb2ff;}
+  .audit .okB{border-color:var(--gold);color:#ffe4a8;}
+  .audit .fb{border-color:var(--red);color:#ffb3b3;}
+  .audit .pt{border-color:var(--grey);}
+  .events{max-height:118px;overflow-y:auto;font-size:11px;}
+  .events div{padding:2.5px 6px;color:var(--dim);border-bottom:1px dashed rgba(130,140,255,.08);}
+  .events b{color:var(--blue);font-weight:600;}
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-thumb{background:rgba(130,140,255,.25);border-radius:3px;}
+  @media(max-width:1020px){.main{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Ganglion · Humanoid Robot External Neural Module Demo</h1>
+      <div class="sub">Robot body = HOST (millisecond reflex layer)&nbsp;·&nbsp;Cloud Qwen3-8B backbone = external capability-module data plane&nbsp;·&nbsp;Real-time visualization of the four core semantics</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a class="badge" href="robot_demo_cn.html" style="text-decoration:none" title="中文版">🌐 中文</a>
+      <div class="badge">Driven by S5 measured data · RTT≈8ms · cold start 1.35s · fail-closed</div>
+    </div>
+  </header>
+
+  <div class="linkbar">
+    <div class="node">
+      <div class="nt">🤖 Robot Body <span class="hb" id="robotHb"></span></div>
+      <div class="nd">Resident reflex layer (local, millisecond-scale) · obstacle avoidance / safe stop<br>HOST process · identity gate / audit trail</div>
+    </div>
+    <div class="linkzone">
+      <canvas id="linkCanvas"></canvas>
+      <div class="linkinfo" id="linkInfo">Data plane: idle (no module mounted)</div>
+    </div>
+    <div class="node" style="text-align:right">
+      <div class="nt">☁️ Cloud · RTX 4090 <span class="hb off" id="cloudHb"></span></div>
+      <div class="nd">Qwen3-8B backbone · layer-16 instrumentation<br>Module process: <span id="modState">not deployed</span></div>
+      <div class="handshake" id="hsText"></div>
+      <div class="hsbar" id="hsBar"><div class="hsfill" id="hsFill"></div></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="card canvasbox">
+      <canvas id="arena" width="900" height="540"></canvas>
+      <div class="narr" id="narr">Click <b>Insert Module A</b> on the right to start — same map, same robot. Plug in a different "cloud brain" and watch the route change; cut the network and watch it <b>get dumber, but never die</b>.</div>
+    </div>
+
+    <div class="side">
+      <div class="card sec">
+        <h3>Module Operations (hot-swap)<span style="font-size:10px">atomic shift at decision boundaries</span></h3>
+        <div class="btns">
+          <button class="modA" id="btnA">Insert Module A<br>"Cautious Navigation"</button>
+          <button class="modB" id="btnB">Hot-swap Module B<br>"Aggressive Navigation"</button>
+          <button id="btnDetach">Detach Module<br>(restore reflex baseline)</button>
+          <button class="danger" id="btnCrash">Crash Injection<br>kill module process</button>
+          <button class="netcut" id="btnNet">Cut / Restore Network<br>(public-net tunnel)</button>
+          <button id="btnReset">Reset Experiment<br>(clear trails & new map)</button>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--purple)"></span>Module A serving</span>
+          <span><span class="dot" style="background:var(--gold)"></span>Module B serving</span>
+          <span><span class="dot" style="background:var(--red)"></span>FALLBACK degraded</span>
+          <span><span class="dot" style="background:var(--grey)"></span>Reflex passthrough</span>
+          <span><span class="dot" style="background:#fff;width:6px;height:6px;border-radius:2px;transform:rotate(45deg)"></span>Swap boundary</span>
+        </div>
+      </div>
+
+      <div class="card sec">
+        <h3>Runtime Stats <span style="font-size:10px" id="mode">Current: reflex baseline</span></h3>
+        <div class="statgrid">
+          <div class="stat"><div class="v" id="stTotal">0</div><div class="l">decision steps</div></div>
+          <div class="stat"><div class="v" id="stFall" style="color:var(--red)">0</div><div class="l">degraded steps</div></div>
+          <div class="stat"><div class="v" id="stTargets" style="color:var(--green)">0</div><div class="l">targets reached</div></div>
+        </div>
+        <div class="bar" id="srcBar">
+          <div style="background:var(--purple);width:0%"></div>
+          <div style="background:var(--gold);width:0%"></div>
+          <div style="background:var(--red);width:0%"></div>
+          <div style="background:var(--grey);width:100%"></div>
+        </div>
+        <div class="rtt"><span>Module cross-machine roundtrip p50</span><b id="rttVal">— ms</b></div>
+      </div>
+
+      <div class="card sec">
+        <h3>Decision Audit Trail (per-step attribution)</h3>
+        <div class="audit" id="audit"></div>
+      </div>
+
+      <div class="card sec">
+        <h3>System Events</h3>
+        <div class="events" id="events"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ Starfield background ============ */
+(function(){
+  const cv=document.getElementById('stars'),ctx=cv.getContext('2d');
+  let stars=[];
+  function rs(){cv.width=innerWidth;cv.height=innerHeight;
+    stars=Array.from({length:130},()=>({x:Math.random()*cv.width,y:Math.random()*cv.height,
+      r:Math.random()*1.3+.2,a:Math.random()*.6+.15,tw:Math.random()*Math.PI*2}));}
+  rs();addEventListener('resize',rs);
+  (function draw(t){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    const g=ctx.createRadialGradient(cv.width*.7,cv.height*.15,0,cv.width*.7,cv.height*.15,cv.width*.7);
+    g.addColorStop(0,'rgba(90,60,180,.10)');g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,cv.width,cv.height);
+    for(const s of stars){const a=s.a*(0.6+0.4*Math.sin(t/900+s.tw));
+      ctx.globalAlpha=a;ctx.fillStyle='#aebbff';ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,7);ctx.fill();}
+    ctx.globalAlpha=1;requestAnimationFrame(draw);
+  })(0);
+})();
+
+/* ============ Experiment state ============ */
+const COLS=30, ROWS=18, CELL=30;
+const S={
+  robot:{x:60,y:270,ang:0},
+  target:null, targetCount:0,
+  obstacles:[], dangers:[],
+  activeModule:null,        // 'A' | 'B' | null
+  pendingSwap:null,
+  network:true, moduleAlive:false,
+  handshake:null,          // {t,dur,module}
+  waypoints:[], trail:[], markers:[],
+  serving:'PT',             // source serving the current step: 'A'|'B'|'FB'|'PT'
+  stats:{A:0,B:0,FB:0,PT:0,total:0}, rtts:[],
+  audit:[], events:[],
+  lastPlanColor:null,
+};
+
+const POLICY={
+  A:{name:'A·Cautious Navigation',margin:2,marginCost:7,dangerR:3.4,dangerCost:42,diag:false},
+  B:{name:'B·Aggressive Navigation',margin:0,marginCost:0,dangerR:1.2,dangerCost:3,diag:true},
+};
+const SRC_COLOR={A:'#b369ff',B:'#ffd76e',FB:'#ff5c5c',PT:'#8a93b0'};
+
+/* ============ Map generation ============ */
+function genMap(){
+  S.obstacles=[];S.dangers=[];
+  const obs=[{c:6,r:3,w:3,h:6},{c:6,r:11,w:3,h:5},{c:14,r:5,w:4,h:3},
+             {c:14,r:11,w:4,h:3},{c:21,r:2,w:3,h:5},{c:21,r:10,w:3,h:6},
+             {c:11,r:8,w:2,h:2}];
+  for(const o of obs)S.obstacles.push(o);
+  S.dangers=[
+    {cx:10.5,cy:4.5,r:2.6},{cx:19,cy:13,r:2.9},{cx:24.5,cy:6.5,r:2.2},
+    {cx:3.5,cy:14,r:1.9},
+  ];
+  S.robot={x:1.5*CELL,y:9*CELL,ang:0};
+  newTarget();
+}
+function newTarget(){
+  for(let i=0;i<80;i++){
+    const c=2+Math.floor(Math.random()*(COLS-4)),r=1+Math.floor(Math.random()*(ROWS-2));
+    if(!blocked(c,r)&&!inDanger(c,r,0.5)){S.target={c,r};return;}
+  }
+  S.target={c:COLS-2,r:1};
+}
+function blocked(c,r){
+  for(const o of S.obstacles)if(c>=o.c&&c<o.c+o.w&&r>=o.r&&r<o.r+o.h)return true;
+  return c<0||r<0||c>=COLS||r>=ROWS;
+}
+function nearObstacle(c,r,m){
+  for(let d=1;d<=m;d++)
+    for(const[dc,dr]of[[d,0],[-d,0],[0,d],[0,-d],[d,d],[d,-d],[-d,d],[-d,-d]])
+      if(blocked(c+dc,r+dr))return true;
+  return false;
+}
+function inDanger(c,r,pad){
+  for(const d of S.dangers){if(Math.hypot(c-d.cx,r-d.cy)<d.r+pad)return true;}
+  return false;
+}
+
+/* ============ A* planning (module = the cloud brain's policy) ============ */
+function plan(policy){
+  const start={c:Math.floor(S.robot.x/CELL),r:Math.floor(S.robot.y/CELL)};
+  const goal={c:S.target.c,r:S.target.r};
+  if(blocked(start.c,start.r))return[];
+  const cost=(c,r)=>{
+    if(blocked(c,r))return Infinity;
+    let g=1;
+    if(policy.margin>0&&nearObstacle(c,r,policy.margin))g+=policy.marginCost;
+    for(const d of S.dangers){
+      const dist=Math.hypot(c-d.cx,r-d.cy),R=d.r+policy.dangerR;
+      if(dist<R)g+=policy.dangerCost*(1-dist/R);
+    }
+    return g;
+  };
+  const open=[{c:start.c,r:start.r,g:0,f:0,p:null}],seen=new Map();
+  const key=(c,r)=>c+','+r;seen.set(key(start.c,start.r),0);
+  while(open.length){
+    open.sort((a,b)=>a.f-b.f);
+    const cur=open.shift();
+    if(cur.c===goal.c&&cur.r===goal.r){
+      const path=[];let n=cur;
+      while(n){path.unshift({c:n.c,r:n.r});n=n.p;}
+      return path;
+    }
+    const dirs=policy.diag?[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]
+                           :[[1,0],[-1,0],[0,1],[0,-1]];
+    for(const[dc,dr]of dirs){
+      const nc=cur.c+dc,nr=cur.r+dr;
+      if(blocked(nc,nr))continue;
+      const step=(dc&&dr?1.414:1)*cost(nc,nr);
+      if(!isFinite(step))continue;
+      const ng=cur.g+step;
+      const k=key(nc,nr);
+      if(seen.has(k)&&seen.get(k)<=ng)continue;
+      seen.set(k,ng);
+      open.push({c:nc,r:nr,g:ng,f:ng+Math.hypot(goal.c-nc,goal.r-nr),p:cur});
+    }
+  }
+  return[];
+}
+
+/* ============ Reflex layer (local baseline: no planning, just dodge) ============ */
+function reflexSteer(){
+  const tx=(S.target.c+.5)*CELL,ty=(S.target.r+.5)*CELL;
+  let ang=Math.atan2(ty-S.robot.y,tx-S.robot.x);
+  // Look-ahead probe: turn if about to hit a wall
+  const look=CELL*1.6;
+  const probe=(a)=>{const px=S.robot.x+Math.cos(a)*look,py=S.robot.y+Math.sin(a)*look;
+    return blocked(Math.floor(px/CELL),Math.floor(py/CELL))||inDanger(px/CELL-0.5,py/CELL-0.5,-0.3);};
+  if(probe(ang)){
+    for(let t=30;t<=180;t+=25){
+      if(!probe(ang+t*Math.PI/180)){ang+=t*Math.PI/180;break;}
+      if(!probe(ang-t*Math.PI/180)){ang-=t*Math.PI/180;break;}
+    }
+  }
+  S.robot.ang+=(function(a,b){let d=a-b;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;})(ang,S.robot.ang)*.25;
+  return{vx:Math.cos(S.robot.ang),vy:Math.sin(S.robot.ang)};
+}
+
+/* ============ Events & audit ============ */
+function logEvent(txt){
+  const t=new Date().toLocaleTimeString('en-GB',{hour12:false});
+  S.events.unshift({t,txt});
+  if(S.events.length>40)S.events.pop();
+  renderEvents();
+}
+function pushAudit(idx){
+  const src=S.serving;
+  let line;
+  if(src==='A'||src==='B'){
+    const rtt=S.rtts[S.rtts.length-1];
+    line=`#${String(idx).padStart(4,'0')} Module ${src} ✓MODULE_OK ${rtt}ms`;
+  }else if(src==='FB'){
+    line=`#${String(idx).padStart(4,'0')} ✗FALLBACK → identity degradation (reflex layer takes over)`;
+  }else{
+    line=`#${String(idx).padStart(4,'0')} — PASSTHROUGH (local reflex direct)`;
+  }
+  S.audit.unshift({line,cls:src==='A'?'okA':src==='B'?'okB':src==='FB'?'fb':'pt'});
+  if(S.audit.length>26)S.audit.pop();
+  renderAudit();
+}
+
+/* ============ Decision step (every 650ms = one token boundary) ============ */
+let decisionIdx=0, decisionTimer=0, fallbackLogged=false;
+function decisionStep(){
+  decisionIdx++;
+  // No module decisions during the cold-start handshake
+  if(S.handshake)return;
+  // Hot-swap takes effect atomically at the decision boundary
+  if(S.pendingSwap){
+    const old=S.activeModule;
+    S.activeModule=S.pendingSwap;S.pendingSwap=null;
+    S.markers.push({x:S.robot.x,y:S.robot.y,from:old,to:S.activeModule});
+    logEvent(`⟳ SWAP_APPLIED ${old}→${S.activeModule} (decision boundary #${decisionIdx}, zero-gap)`);
+  }
+  let src;
+  if(!S.activeModule){src='PT';}
+  else if(!S.network||!S.moduleAlive){src='FB';}
+  else{src=S.activeModule;}
+  S.serving=src;
+  if(src==='A'||src==='B'){
+    const rtt=(7+Math.random()*4.6).toFixed(1);
+    S.rtts.push(parseFloat(rtt));if(S.rtts.length>60)S.rtts.shift();
+    S.waypoints=plan(POLICY[src]);
+    if(!fallbackLogged)logEvent(`✓ Module ${src} resumed service (MODULE_OK)`);
+    fallbackLogged=false;
+  }else{
+    S.waypoints=[];
+    if(src==='FB'&&!fallbackLogged){
+      logEvent(S.network?'⚠ Module process died → identity-gate degradation, robot continues (dumber, not dead)'
+                        :'⚠ Network disconnected → identity-gate degradation, reflex layer takes over (fail-closed)');
+      fallbackLogged=true;
+    }
+    if(src==='PT')fallbackLogged=false;
+  }
+  S.stats[src]++;S.stats.total++;
+  pushAudit(decisionIdx);
+  renderStats();
+}
+
+/* ============ Movement ============ */
+let stuckTicks=0;
+function move(dt){
+  let vx,vy;
+  if((S.serving==='A'||S.serving==='B')&&S.waypoints.length>1){
+    // Follow the cloud-planned path
+    const wp=S.waypoints[1];
+    const tx=(wp.c+.5)*CELL,ty=(wp.r+.5)*CELL;
+    const dx=tx-S.robot.x,dy=ty-S.robot.y,d=Math.hypot(dx,dy);
+    if(d<8){S.waypoints.shift();return;}
+    vx=dx/d;vy=dy/d;
+    S.robot.ang=Math.atan2(vy,vx);
+    stuckTicks=0;
+  }else{
+    const s=reflexSteer();vx=s.vx;vy=s.vy;
+    // Stuck detection
+    const nx=S.robot.x+vx*2,ny=S.robot.y+vy*2;
+    if(blocked(Math.floor(nx/CELL),Math.floor(ny/CELL)))stuckTicks++;
+    if(stuckTicks>26){ // The local reflex can also break free (simple random re-aim)
+      S.robot.ang+=Math.PI*(0.5+Math.random());
+      stuckTicks=0;
+    }
+  }
+  const sp=1.9;
+  S.robot.x+=vx*sp;S.robot.y+=vy*sp;
+  S.robot.x=Math.max(12,Math.min(COLS*CELL-12,S.robot.x));
+  S.robot.y=Math.max(12,Math.min(ROWS*CELL-12,S.robot.y));
+  // Trail recording (with source attribution)
+  S.trail.push({x:S.robot.x,y:S.robot.y,src:S.handshake?S.serving:(S.activeModule&&(S.network&&S.moduleAlive)?S.activeModule:(S.activeModule?'FB':'PT'))});
+  if(S.trail.length>4000)S.trail.shift();
+  // Target reached
+  const tdx=(S.target.c+.5)*CELL-S.robot.x,tdy=(S.target.r+.5)*CELL-S.robot.y;
+  if(Math.hypot(tdx,tdy)<14){
+    S.targetCount++;newTarget();
+    logEvent(`🏁 Target #${S.targetCount} reached, generating a new one`);
+    if(S.activeModule&&(S.network&&S.moduleAlive)&&!S.handshake)S.waypoints=plan(POLICY[S.activeModule]);
+    renderStats();
+  }
+}
+
+/* ============ Render main canvas ============ */
+const arena=document.getElementById('arena'),actx=arena.getContext('2d');
+function drawArena(t){
+  const W=COLS*CELL,H=ROWS*CELL;
+  actx.clearRect(0,0,W,H);
+  // Grid
+  actx.strokeStyle='rgba(120,130,255,.055)';actx.lineWidth=1;
+  for(let c=0;c<=COLS;c++){actx.beginPath();actx.moveTo(c*CELL,0);actx.lineTo(c*CELL,H);actx.stroke();}
+  for(let r=0;r<=ROWS;r++){actx.beginPath();actx.moveTo(0,r*CELL);actx.lineTo(W,r*CELL);actx.stroke();}
+  // Danger zones (pulsing)
+  for(const d of S.dangers){
+    const px=(d.cx+.5)*CELL,py=(d.cy+.5)*CELL,pr=d.r*CELL;
+    const pulse=.14+.08*Math.sin(t/500+d.cx);
+    const g=actx.createRadialGradient(px,py,pr*.2,px,py,pr);
+    g.addColorStop(0,`rgba(255,70,70,${pulse+.16})`);g.addColorStop(1,'rgba(255,70,70,0)');
+    actx.fillStyle=g;actx.beginPath();actx.arc(px,py,pr,0,7);actx.fill();
+    actx.strokeStyle=`rgba(255,92,92,${.28+.12*Math.sin(t/500)})`;
+    actx.setLineDash([5,5]);actx.beginPath();actx.arc(px,py,pr,0,7);actx.stroke();actx.setLineDash([]);
+    actx.fillStyle='rgba(255,120,120,.5)';actx.font='10px sans-serif';
+    actx.fillText('DANGER',px-16,py+3);
+  }
+  // Obstacles
+  for(const o of S.obstacles){
+    const g=actx.createLinearGradient(o.c*CELL,o.r*CELL,(o.c+o.w)*CELL,(o.r+o.h)*CELL);
+    g.addColorStop(0,'rgba(90,100,190,.4)');g.addColorStop(1,'rgba(60,70,150,.25)');
+    actx.fillStyle=g;
+    roundRect(o.c*CELL+2,o.r*CELL+2,o.w*CELL-4,o.h*CELL-4,6);actx.fill();
+    actx.strokeStyle='rgba(140,150,255,.35)';actx.lineWidth=1;actx.stroke();
+  }
+  // Target
+  if(S.target){
+    const tx=(S.target.c+.5)*CELL,ty=(S.target.r+.5)*CELL;
+    const rr=9+2.5*Math.sin(t/300);
+    actx.strokeStyle='#ffd76e';actx.lineWidth=2;
+    actx.beginPath();actx.arc(tx,ty,rr,0,7);actx.stroke();
+    actx.fillStyle='rgba(255,215,110,.25)';actx.beginPath();actx.arc(tx,ty,5,0,7);actx.fill();
+  }
+  // Trail (segment-colored by source)
+  actx.lineWidth=2.5;actx.lineCap='round';
+  for(let i=1;i<S.trail.length;i++){
+    const a=S.trail[i-1],b=S.trail[i];
+    if(Math.hypot(a.x-b.x,a.y-b.y)>CELL*2.5)continue;
+    actx.strokeStyle=SRC_COLOR[b.src]||SRC_COLOR.PT;
+    actx.globalAlpha=.75;
+    actx.beginPath();actx.moveTo(a.x,a.y);actx.lineTo(b.x,b.y);actx.stroke();
+  }
+  actx.globalAlpha=1;
+  // Swap-boundary markers
+  for(const m of S.markers){
+    actx.save();actx.translate(m.x,m.y);actx.rotate(Math.PI/4);
+    actx.fillStyle='#fff';actx.globalAlpha=.95;
+    actx.fillRect(-4.5,-4.5,9,9);
+    actx.restore();
+    actx.fillStyle='rgba(255,255,255,.85)';actx.font='10px sans-serif';
+    actx.fillText(`${m.from}→${m.to}`,m.x+9,m.y-8);
+  }
+  // Planned path preview
+  if((S.serving==='A'||S.serving==='B')&&S.waypoints.length>1){
+    actx.strokeStyle=SRC_COLOR[S.serving];actx.globalAlpha=.22;actx.lineWidth=1.5;
+    actx.setLineDash([4,6]);actx.beginPath();
+    actx.moveTo(S.robot.x,S.robot.y);
+    for(let i=1;i<S.waypoints.length;i++)
+      actx.lineTo((S.waypoints[i].c+.5)*CELL,(S.waypoints[i].r+.5)*CELL);
+    actx.stroke();actx.setLineDash([]);actx.globalAlpha=1;
+  }
+  // Robot (top-down humanoid)
+  const rx=S.robot.x,ry=S.robot.y,ra=S.robot.ang;
+  const glow=actx.createRadialGradient(rx,ry,2,rx,ry,22);
+  const gc=S.serving==='A'?[179,105,255]:S.serving==='B'?[255,215,110]:
+           S.serving==='FB'?[255,92,92]:[138,147,176];
+  glow.addColorStop(0,`rgba(${gc},.5)`);glow.addColorStop(1,`rgba(${gc},0)`);
+  actx.fillStyle=glow;actx.beginPath();actx.arc(rx,ry,22,0,7);actx.fill();
+  actx.save();actx.translate(rx,ry);actx.rotate(ra);
+  actx.fillStyle='#e8ecff';
+  actx.beginPath();actx.arc(0,-7,4.2,0,7);actx.fill();      // head (facing -y)
+  actx.beginPath();actx.ellipse(0,2,6,8,0,0,7);actx.fill(); // torso
+  actx.strokeStyle='#cfd6ff';actx.lineWidth=2.4;actx.lineCap='round';
+  actx.beginPath();actx.moveTo(-5,-1);actx.lineTo(-6,-9);actx.stroke();   // left arm
+  actx.beginPath();actx.moveTo(5,-1);actx.lineTo(6,-9);actx.stroke();     // right arm
+  actx.beginPath();actx.moveTo(-2.5,9);actx.lineTo(-3,16);actx.stroke();  // left leg
+  actx.beginPath();actx.moveTo(2.5,9);actx.lineTo(3,16);actx.stroke();   // right leg
+  // Perception scan cone
+  const scan=actx.createRadialGradient(0,-14,2,0,-14,26);
+  scan.addColorStop(0,`rgba(${gc},.35)`);scan.addColorStop(1,`rgba(${gc},0)`);
+  actx.fillStyle=scan;actx.beginPath();
+  actx.moveTo(0,0);actx.arc(0,0,28,-Math.PI*.78,-Math.PI*.22);actx.closePath();actx.fill();
+  actx.restore();
+}
+function roundRect(x,y,w,h,r){
+  actx.beginPath();actx.moveTo(x+r,y);actx.arcTo(x+w,y,x+w,y+h,r);
+  actx.arcTo(x+w,y+h,x,y+h,r);actx.arcTo(x,y+h,x,y,r);actx.arcTo(x,y,x+w,y,r);actx.closePath();
+}
+
+/* ============ Link bar (data-plane particles) ============ */
+const lcv=document.getElementById('linkCanvas'),lctx=lcv.getContext('2d');
+let particles=[];
+function drawLink(t,dt){
+  const zone=document.querySelector('.linkzone');
+  lcv.width=zone.clientWidth;lcv.height=zone.clientHeight;
+  lctx.clearRect(0,0,lcv.width,lcv.height);
+  const y=lcv.height/2;
+  const x0=2,x1=lcv.width-2;
+  const active=S.activeModule&&S.network&&S.moduleAlive&&!S.handshake;
+  const hs=S.handshake;
+  // Link line
+  lctx.lineWidth=2;
+  if(hs){
+    lctx.strokeStyle='rgba(255,215,110,.8)';lctx.setLineDash([4,4]);
+    lctx.lineDashOffset=-t/30;
+  }else if(active){
+    lctx.strokeStyle=SRC_COLOR[S.activeModule];lctx.setLineDash([]);
+    lctx.shadowColor=SRC_COLOR[S.activeModule];lctx.shadowBlur=8;
+  }else if(S.activeModule&&(S.network&&!S.moduleAlive)){
+    lctx.strokeStyle='rgba(255,92,92,.7)';lctx.setLineDash([2,5]);
+  }else if(!S.network&&S.activeModule){
+    lctx.strokeStyle='rgba(255,92,92,.55)';lctx.setLineDash([2,5]);
+    // Break point ×
+    const mx=lcv.width/2;
+    lctx.setLineDash([]);lctx.lineWidth=2.5;lctx.strokeStyle='#ff5c5c';
+    lctx.beginPath();lctx.moveTo(mx-8,y-8);lctx.lineTo(mx+8,y+8);
+    lctx.moveTo(mx+8,y-8);lctx.lineTo(mx-8,y+8);lctx.stroke();
+  }else{
+    lctx.strokeStyle='rgba(130,140,255,.18)';lctx.setLineDash([3,7]);
+  }
+  lctx.beginPath();lctx.moveTo(x0,y);
+  lctx.bezierCurveTo(lcv.width*.3,y-14,lcv.width*.7,y+14,x1,y);
+  lctx.stroke();lctx.shadowBlur=0;
+  // Particles (uplink perception / downlink refined)
+  if(active){
+    if(Math.random()<.3)particles.push({p:0,dir:Math.random()<.5?1:-1,c:SRC_COLOR[S.activeModule]});
+    for(const pt of particles){
+      pt.p+=dt/900*(pt.dir>0?1:1)*0.55;
+      const u=pt.dir>0?pt.p:1-pt.p;
+      const px=x0+(x1-x0)*u;
+      const py=y+Math.sin(Math.PI*u)* -14*(pt.dir>0?1:-1)*0+ (u*2-1)*7;
+      lctx.fillStyle=pt.c;lctx.globalAlpha=.9;
+      lctx.beginPath();lctx.arc(px,py+(pt.dir>0?-7:7),2.2,0,7);lctx.fill();
+      lctx.globalAlpha=1;
+    }
+    particles=particles.filter(pt=>pt.p<1.05);
+  }else particles=[];
+}
+
+/* ============ UI rendering ============ */
+const $=id=>document.getElementById(id);
+function renderStats(){
+  $('stTotal').textContent=S.stats.total;
+  $('stFall').textContent=S.stats.FB;
+  $('stTargets').textContent=S.targetCount;
+  const t=Math.max(1,S.stats.total);
+  const bars=$('srcBar').children;
+  bars[0].style.width=(S.stats.A/t*100)+'%';
+  bars[1].style.width=(S.stats.B/t*100)+'%';
+  bars[2].style.width=(S.stats.FB/t*100)+'%';
+  bars[3].style.width=(S.stats.PT/t*100)+'%';
+  if(S.rtts.length){
+    const s=[...S.rtts].sort((a,b)=>a-b);
+    $('rttVal').textContent=s[Math.floor(s.length/2)].toFixed(1)+' ms';
+  }
+  // Current mode badge
+  let mode='Current: reflex baseline',color='var(--grey)';
+  if(S.handshake){mode='Cold-start handshake in progress…';color='var(--gold)';}
+  else if(S.activeModule&&S.network&&S.moduleAlive){mode=`Current: Module ${S.activeModule} serving`;color=S.activeModule==='A'?'var(--purple)':'var(--gold)';}
+  else if(S.activeModule){mode='Degraded mode (reflex layer)';color='var(--red)';}
+  const m=$('mode');m.textContent=mode;m.style.color=color;
+  if(S.pendingSwap&&!S.handshake){mode+=' ⏳swap pending';}
+}
+function renderAudit(){
+  $('audit').innerHTML=S.audit.map(a=>`<div class="${a.cls}">${a.line}</div>`).join('');
+}
+function renderEvents(){
+  $('events').innerHTML=S.events.map(e=>`<div><b>${e.t}</b> ${e.txt}</div>`).join('');
+}
+function renderLinkInfo(){
+  const li=$('linkInfo');
+  if(S.handshake){li.textContent=`Data plane: READY handshake ${S.handshake.t.toFixed(0)}/${S.handshake.dur}ms (cold start)`;li.style.color='var(--gold)';}
+  else if(S.activeModule&&S.network&&S.moduleAlive){
+    li.textContent=`Data plane: Module ${S.activeModule} roundtrip every 640ms · hidden[1,4096]·fp32 · RTT≈8ms`;
+    li.style.color=SRC_COLOR[S.activeModule];
+  }else if(S.activeModule&&!S.network){li.textContent='Data plane: ✂ network disconnected (public-net tunnel broken)';li.style.color='var(--red)';}
+  else if(S.activeModule&&!S.moduleAlive){li.textContent='Data plane: module process crashed (heartbeat lost)';li.style.color='var(--red)';}
+  else{li.textContent='Data plane: idle (no module mounted)';li.style.color='var(--dim)';}
+}
+function renderNarr(){
+  const n=$('narr');
+  if(S.handshake){n.innerHTML=`Module process cold-starting — <b>spawn→READY ≈1.35s</b> (measured on Windows). The readiness handshake is the final step of registration negotiation: without it, a health check would misjudge "still starting" as "already dead".`;return;}
+  if(S.activeModule&&S.network&&S.moduleAlive){
+    const pol=S.activeModule==='A'?'avoids all danger zones and keeps a safety margin from obstacles':'takes shortcuts and cuts through danger-zone edges';
+    n.innerHTML=`<b>The cloud brain (Module ${S.activeModule}) is planning</b>: ${pol}. The local reflex layer only provides millisecond-scale obstacle-avoidance fallback — watch the trail color (${S.activeModule==='A'?'purple':'gold'}) and the per-step attribution in the <strong>decision audit</strong>.`;
+  }else if(S.activeModule&&!S.network){
+    n.innerHTML=`<b>The network is down, but the robot isn't dead.</b> Identity-gate degradation (fail-closed): the motion stream in flight is not interrupted — it simply steps down from "cloud planning" to "local reflex" — <strong>dumber, but not blind</strong>. Try restoring the network.`;
+  }else if(S.activeModule&&!S.moduleAlive){
+    n.innerHTML=`<b>The module process was killed.</b> Same semantics as S2-D: the host detects no response on the current step → identity passthrough. External backdoors and failures are <strong>runtime and recoverable</strong> — just insert a fresh process (fresh READY).`;
+  }else{
+    n.innerHTML=`<b>Pure local reflex baseline</b>: with no cloud brain, the robot greedily heads for the target on millisecond reflexes alone — hesitant, hugging edges, occasionally stuck then breaking free. Insert Module A or B and watch the <strong>qualitative change</strong> in routes on the same map.`;
+  }
+}
+
+/* ============ Buttons ============ */
+function startHandshake(mod){
+  if(S.handshake)return;
+  S.handshake={t:0,dur:1350,module:mod};
+  logEvent(`⇪ Deploy Module ${mod} → ABI negotiation ✓ (layer=blk.16·dim=4096·fp32) → cold start…`);
+  $('hsText').style.display='block';$('hsBar').style.display='block';
+  $('hsText').textContent='spawn → READY handshake in progress…';
+}
+$('btnA').onclick=()=>{if(S.activeModule==='A'||S.handshake)return;startHandshake('A');};
+$('btnB').onclick=()=>{
+  if(S.handshake)return;
+  if(!S.activeModule){startHandshake('B');return;}
+  if(S.activeModule==='B')return;
+  S.pendingSwap='B';
+  logEvent(`⏳ SWAP_REQUESTED A→B (will take atomic effect at the next decision boundary)`);
+};
+$('btnDetach').onclick=()=>{
+  if(!S.activeModule||S.handshake)return;
+  logEvent(`⏏ DETACH Module ${S.activeModule} → restore reflex baseline (detachment is reversible)`);
+  S.activeModule=null;S.moduleAlive=false;S.waypoints=[];
+};
+$('btnCrash').onclick=()=>{
+  if(!S.activeModule||!S.moduleAlive||S.handshake)return;
+  S.moduleAlive=false;
+  logEvent(`💥 kill -9 Module ${S.activeModule} process (zero-cleanup hard crash) → awaiting watchdog`);
+};
+$('btnNet').onclick=()=>{
+  S.network=!S.network;
+  logEvent(S.network?'🌐 Network restored (public-net tunnel reconnected)':'✂ Network disconnected');
+};
+$('btnReset').onclick=()=>{
+  genMap();S.trail=[];S.markers=[];S.audit=[];S.rtts=[];
+  S.stats={A:0,B:0,FB:0,PT:0,total:0};S.targetCount=0;
+  S.activeModule=null;S.moduleAlive=false;S.pendingSwap=null;S.handshake=null;
+  decisionIdx=0;fallbackLogged=false;S.waypoints=[];
+  $('hsText').style.display='none';$('hsBar').style.display='none';
+  logEvent('🔄 Experiment reset (new map)');
+  renderStats();renderAudit();
+};
+function syncButtons(){
+  $('btnA').disabled=!!S.handshake||S.activeModule==='A';
+  $('btnB').disabled=!!S.handshake||S.activeModule==='B';
+  $('btnDetach').disabled=!S.activeModule||!!S.handshake;
+  $('btnCrash').disabled=!S.activeModule||!S.moduleAlive||!!S.handshake;
+  $('btnNet').textContent=S.network?'Cut / Restore Network\n(public-net tunnel)':'Restore Network\n(currently cut)';
+  $('btnNet').classList.toggle('danger',!S.network);
+  // Heartbeats
+  const rh=$('robotHb');rh.className='hb';
+  const ch=$('cloudHb');
+  if(S.handshake){ch.className='hb';}
+  else if(S.activeModule&&S.moduleAlive&&S.network){ch.className='hb';}
+  else if(S.activeModule){ch.className='hb dead';}
+  else{ch.className='hb off';}
+  const ms=$('modState');
+  if(S.handshake){ms.textContent=`Module ${S.handshake.module}·starting`;ms.style.color='var(--gold)';}
+  else if(S.activeModule&&S.moduleAlive){ms.textContent=`Module ${S.activeModule}·serving`;ms.style.color=S.activeModule==='A'?'var(--purple)':'var(--gold)';}
+  else if(S.activeModule){ms.textContent='module·crashed/unreachable';ms.style.color='var(--red)';}
+  else{ms.textContent='not deployed';ms.style.color='var(--dim)';}
+}
+
+/* ============ Main loop ============ */
+let last=performance.now();
+function loop(t){
+  const dt=Math.min(50,t-last);last=t;
+  // Handshake progress
+  if(S.handshake){
+    S.handshake.t+=dt;
+    $('hsFill').style.width=Math.min(100,S.handshake.t/S.handshake.dur*100)+'%';
+    if(S.handshake.t>=S.handshake.dur){
+      S.activeModule=S.handshake.module;S.moduleAlive=true;
+      logEvent(`✓ READY Module ${S.activeModule} up (1.35s) → begin serving`);
+      S.handshake=null;
+      $('hsText').style.display='none';$('hsBar').style.display='none';
+      $('hsFill').style.width='0%';
+      decisionStep();
+    }
+  }
+  // Decision tick
+  decisionTimer+=dt;
+  if(decisionTimer>=640){decisionTimer=0;decisionStep();}
+  // Movement
+  if(!S.handshake||true)move(dt);
+  // Render
+  drawArena(t);
+  drawLink(t,dt);
+  renderLinkInfo();
+  syncButtons();
+  if(Math.floor(t/500)!==Math.floor((t-dt)/500))renderNarr();
+  requestAnimationFrame(loop);
+}
+
+/* ============ Boot ============ */
+genMap();
+logEvent('🚀 Demo started: robot body (HOST) ready, reflex layer resident');
+logEvent('Tip: insert Module A for cautious routes, hot-swap B for a route phase-change, then cut the network to see fail-closed');
+renderStats();renderAudit();renderEvents();renderNarr();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

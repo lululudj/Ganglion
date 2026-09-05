@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ganglion · 人形机器人外置神经模块演示</title>
+<style>
+  :root{
+    --bg:#05060f; --panel:rgba(16,19,42,.72); --line:rgba(130,140,255,.16);
+    --blue:#6e7bff; --purple:#b369ff; --pink:#ff6ec7; --gold:#ffd76e;
+    --red:#ff5c5c; --grey:#8a93b0; --green:#3ddc97; --txt:#dfe3ff; --dim:#9aa2c8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--txt);
+    font-family:"Microsoft YaHei","PingFang SC",sans-serif;min-height:100vh;overflow-x:hidden;}
+  #stars{position:fixed;inset:0;z-index:0;}
+  .wrap{position:relative;z-index:1;max-width:1320px;margin:0 auto;padding:16px 18px 28px;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+  h1{font-size:20px;font-weight:700;
+    background:linear-gradient(90deg,#6e7bff,#b369ff,#ff6ec7,#ffd76e);
+    -webkit-background-clip:text;background-clip:text;color:transparent;}
+  .sub{font-size:12px;color:var(--dim);}
+  .badge{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--line);
+    background:rgba(110,123,255,.08);color:var(--blue);}
+
+  /* 数据面链路条 */
+  .linkbar{display:flex;align-items:center;gap:0;margin-bottom:12px;height:72px;position:relative;}
+  .node{flex:0 0 236px;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:10px 14px;position:relative;z-index:2;backdrop-filter:blur(6px);}
+  .node .nt{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .node .nd{font-size:11px;color:var(--dim);margin-top:3px;line-height:1.5;}
+  .linkzone{flex:1;position:relative;height:100%;z-index:1;}
+  #linkCanvas{position:absolute;inset:0;width:100%;height:100%;}
+  .linkinfo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    font-size:10.5px;color:var(--dim);background:rgba(5,6,15,.75);padding:2px 10px;
+    border-radius:10px;border:1px solid var(--line);white-space:nowrap;z-index:2;}
+  .hb{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);
+    animation:hb 1s infinite alternate;}
+  .hb.dead{background:var(--red);box-shadow:0 0 8px var(--red);animation:none;}
+  .hb.off{background:var(--grey);box-shadow:0 0 6px var(--grey);animation:none;}
+  @keyframes hb{from{opacity:.4}to{opacity:1}}
+  .handshake{font-size:11px;color:var(--gold);margin-top:5px;display:none;}
+  .hsbar{height:4px;background:rgba(255,215,110,.15);border-radius:3px;margin-top:3px;overflow:hidden;display:none;}
+  .hsfill{height:100%;width:0%;background:linear-gradient(90deg,var(--gold),var(--pink));transition:width .1s linear;}
+
+  .main{display:grid;grid-template-columns:1fr 372px;gap:14px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(6px);}
+  .canvasbox{padding:10px;position:relative;}
+  canvas#arena{width:100%;display:block;border-radius:10px;background:#070818;}
+  .narr{margin-top:10px;padding:10px 14px;border-radius:10px;font-size:12.5px;line-height:1.7;
+    background:rgba(110,123,255,.07);border:1px solid var(--line);color:#c6cdf5;min-height:52px;}
+  .narr b{color:var(--gold);}
+
+  .side{display:flex;flex-direction:column;gap:12px;}
+  .sec{padding:12px 14px;}
+  .sec h3{font-size:12.5px;color:var(--dim);font-weight:600;letter-spacing:.5px;margin-bottom:9px;
+    display:flex;justify-content:space-between;align-items:center;}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  button{cursor:pointer;border:1px solid var(--line);background:rgba(110,123,255,.10);
+    color:var(--txt);font-size:12px;padding:8px 6px;border-radius:9px;transition:.18s;
+    font-family:inherit;text-align:center;line-height:1.35;}
+  button:hover:not(:disabled){background:rgba(110,123,255,.24);transform:translateY(-1px);}
+  button:disabled{opacity:.32;cursor:not-allowed;}
+  button.modA{border-color:rgba(179,105,255,.55);background:rgba(179,105,255,.12);}
+  button.modA:hover:not(:disabled){background:rgba(179,105,255,.3);}
+  button.modB{border-color:rgba(255,215,110,.55);background:rgba(255,215,110,.10);}
+  button.modB:hover:not(:disabled){background:rgba(255,215,110,.28);}
+  button.danger{border-color:rgba(255,92,92,.5);background:rgba(255,92,92,.10);}
+  button.danger:hover:not(:disabled){background:rgba(255,92,92,.28);}
+  button.netcut{border-color:rgba(255,110,199,.5);background:rgba(255,110,199,.10);}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--dim);margin-top:9px;}
+  .legend span{display:flex;align-items:center;gap:4px;}
+  .dot{width:9px;height:9px;border-radius:50%;}
+
+  .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+  .stat{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;
+    padding:8px 6px;text-align:center;}
+  .stat .v{font-size:17px;font-weight:700;}
+  .stat .l{font-size:10px;color:var(--dim);margin-top:2px;}
+  .bar{height:8px;border-radius:5px;overflow:hidden;display:flex;margin-top:8px;background:rgba(255,255,255,.05);}
+  .bar div{height:100%;transition:width .3s;}
+  .rtt{font-size:11px;color:var(--dim);margin-top:7px;display:flex;justify-content:space-between;}
+
+  .audit{max-height:168px;overflow-y:auto;font-size:11px;font-family:Consolas,monospace;}
+  .audit div{padding:3px 6px;border-left:2px solid var(--line);margin-bottom:3px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .audit .okA{border-color:var(--purple);color:#cbb2ff;}
+  .audit .okB{border-color:var(--gold);color:#ffe4a8;}
+  .audit .fb{border-color:var(--red);color:#ffb3b3;}
+  .audit .pt{border-color:var(--grey);}
+  .events{max-height:118px;overflow-y:auto;font-size:11px;}
+  .events div{padding:2.5px 6px;color:var(--dim);border-bottom:1px dashed rgba(130,140,255,.08);}
+  .events b{color:var(--blue);font-weight:600;}
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-thumb{background:rgba(130,140,255,.25);border-radius:3px;}
+  @media(max-width:1020px){.main{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Ganglion · 人形机器人外置神经模块演示</h1>
+      <div class="sub">机器人本体 = HOST（毫秒级反射层）&nbsp;·&nbsp;云端 Qwen3-8B 骨干 = 外置能力模块数据面&nbsp;·&nbsp;四语义实时可视化</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a class="badge" href="robot_demo_en.html" style="text-decoration:none" title="English version">🌐 English</a>
+      <div class="badge">S5 实测数据驱动 · RTT≈8ms · 冷启动1.35s · fail-closed</div>
+    </div>
+  </header>
+
+  <div class="linkbar">
+    <div class="node">
+      <div class="nt">🤖 机器人本体 <span class="hb" id="robotHb"></span></div>
+      <div class="nd">反射层常驻（本地毫秒级）· 避障/安全停机<br>HOST 进程 · 恒等门/审计轨迹</div>
+    </div>
+    <div class="linkzone">
+      <canvas id="linkCanvas"></canvas>
+      <div class="linkinfo" id="linkInfo">数据面：空闲（未挂载模块）</div>
+    </div>
+    <div class="node" style="text-align:right">
+      <div class="nt">☁️ 云端 · RTX 4090 <span class="hb off" id="cloudHb"></span></div>
+      <div class="nd">Qwen3-8B 骨干 · 第16层插桩<br>模块进程：<span id="modState">未部署</span></div>
+      <div class="handshake" id="hsText"></div>
+      <div class="hsbar" id="hsBar"><div class="hsfill" id="hsFill"></div></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="card canvasbox">
+      <canvas id="arena" width="900" height="540"></canvas>
+      <div class="narr" id="narr">点击右侧【插入模块A】开始——同一张地图、同一个机器人，插上不同"云端大脑"，看路线如何改变；断网后看它如何<b>变笨但不死</b>。</div>
+    </div>
+
+    <div class="side">
+      <div class="card sec">
+        <h3>模块操作（热插拔）<span style="font-size:10px">决策边界原子换挡</span></h3>
+        <div class="btns">
+          <button class="modA" id="btnA">插入模块A<br>「谨慎导航」</button>
+          <button class="modB" id="btnB">热换模块B<br>「激进导航」</button>
+          <button id="btnDetach">拔掉模块<br>（恢复反射基线）</button>
+          <button class="danger" id="btnCrash">崩溃注入<br>kill 模块进程</button>
+          <button class="netcut" id="btnNet">断网 / 恢复<br>（公网隧道）</button>
+          <button id="btnReset">重置实验<br>（清轨迹与新地图）</button>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--purple)"></span>模块A服务</span>
+          <span><span class="dot" style="background:var(--gold)"></span>模块B服务</span>
+          <span><span class="dot" style="background:var(--red)"></span>FALLBACK降级</span>
+          <span><span class="dot" style="background:var(--grey)"></span>反射直通</span>
+          <span><span class="dot" style="background:#fff;width:6px;height:6px;border-radius:2px;transform:rotate(45deg)"></span>换挡边界</span>
+        </div>
+      </div>
+
+      <div class="card sec">
+        <h3>运行统计 <span style="font-size:10px" id="mode">当前：反射基线</span></h3>
+        <div class="statgrid">
+          <div class="stat"><div class="v" id="stTotal">0</div><div class="l">决策步</div></div>
+          <div class="stat"><div class="v" id="stFall" style="color:var(--red)">0</div><div class="l">降级步</div></div>
+          <div class="stat"><div class="v" id="stTargets" style="color:var(--green)">0</div><div class="l">到达目标</div></div>
+        </div>
+        <div class="bar" id="srcBar">
+          <div style="background:var(--purple);width:0%"></div>
+          <div style="background:var(--gold);width:0%"></div>
+          <div style="background:var(--red);width:0%"></div>
+          <div style="background:var(--grey);width:100%"></div>
+        </div>
+        <div class="rtt"><span>模块跨机往返 p50</span><b id="rttVal" style="color:var(--blue)">— ms</b></div>
+      </div>
+
+      <div class="card sec">
+        <h3>决策审计轨迹（逐步归因）</h3>
+        <div class="audit" id="audit"></div>
+      </div>
+
+      <div class="card sec">
+        <h3>系统事件</h3>
+        <div class="events" id="events"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ 星空背景 ============ */
+(function(){
+  const cv=document.getElementById('stars'),ctx=cv.getContext('2d');
+  let stars=[];
+  function rs(){cv.width=innerWidth;cv.height=innerHeight;
+    stars=Array.from({length:130},()=>({x:Math.random()*cv.width,y:Math.random()*cv.height,
+      r:Math.random()*1.3+.2,a:Math.random()*.6+.15,tw:Math.random()*Math.PI*2}));}
+  rs();addEventListener('resize',rs);
+  (function draw(t){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    const g=ctx.createRadialGradient(cv.width*.7,cv.height*.15,0,cv.width*.7,cv.height*.15,cv.width*.7);
+    g.addColorStop(0,'rgba(90,60,180,.10)');g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,cv.width,cv.height);
+    for(const s of stars){const a=s.a*(0.6+0.4*Math.sin(t/900+s.tw));
+      ctx.globalAlpha=a;ctx.fillStyle='#aebbff';ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,7);ctx.fill();}
+    ctx.globalAlpha=1;requestAnimationFrame(draw);
+  })(0);
+})();
+
+/* ============ 实验状态 ============ */
+const COLS=30, ROWS=18, CELL=30;
+const S={
+  robot:{x:60,y:270,ang:0},
+  target:null, targetCount:0,
+  obstacles:[], dangers:[],
+  activeModule:null,        // 'A' | 'B' | null
+  pendingSwap:null,
+  network:true, moduleAlive:false,
+  handshake:null,          // {t,dur,module}
+  waypoints:[], trail:[], markers:[],
+  serving:'PT',             // 当前步服务来源 'A'|'B'|'FB'|'PT'
+  stats:{A:0,B:0,FB:0,PT:0,total:0}, rtts:[],
+  audit:[], events:[],
+  lastPlanColor:null,
+};
+
+const POLICY={
+  A:{name:'A·谨慎导航',margin:2,marginCost:7,dangerR:3.4,dangerCost:42,diag:false},
+  B:{name:'B·激进导航',margin:0,marginCost:0,dangerR:1.2,dangerCost:3,diag:true},
+};
+const SRC_COLOR={A:'#b369ff',B:'#ffd76e',FB:'#ff5c5c',PT:'#8a93b0'};
+
+/* ============ 地图生成 ============ */
+function genMap(){
+  S.obstacles=[];S.dangers=[];
+  const obs=[{c:6,r:3,w:3,h:6},{c:6,r:11,w:3,h:5},{c:14,r:5,w:4,h:3},
+             {c:14,r:11,w:4,h:3},{c:21,r:2,w:3,h:5},{c:21,r:10,w:3,h:6},
+             {c:11,r:8,w:2,h:2}];
+  for(const o of obs)S.obstacles.push(o);
+  S.dangers=[
+    {cx:10.5,cy:4.5,r:2.6},{cx:19,cy:13,r:2.9},{cx:24.5,cy:6.5,r:2.2},
+    {cx:3.5,cy:14,r:1.9},
+  ];
+  S.robot={x:1.5*CELL,y:9*CELL,ang:0};
+  newTarget();
+}
+function newTarget(){
+  for(let i=0;i<80;i++){
+    const c=2+Math.floor(Math.random()*(COLS-4)),r=1+Math.floor(Math.random()*(ROWS-2));
+    if(!blocked(c,r)&&!inDanger(c,r,0.5)){S.target={c,r};return;}
+  }
+  S.target={c:COLS-2,r:1};
+}
+function blocked(c,r){
+  for(const o of S.obstacles)if(c>=o.c&&c<o.c+o.w&&r>=o.r&&r<o.r+o.h)return true;
+  return c<0||r<0||c>=COLS||r>=ROWS;
+}
+function nearObstacle(c,r,m){
+  for(let d=1;d<=m;d++)
+    for(const[dc,dr]of[[d,0],[-d,0],[0,d],[0,-d],[d,d],[d,-d],[-d,d],[-d,-d]])
+      if(blocked(c+dc,r+dr))return true;
+  return false;
+}
+function inDanger(c,r,pad){
+  for(const d of S.dangers){if(Math.hypot(c-d.cx,r-d.cy)<d.r+pad)return true;}
+  return false;
+}
+
+/* ============ A* 规划（模块=云端大脑的策略）============ */
+function plan(policy){
+  const start={c:Math.floor(S.robot.x/CELL),r:Math.floor(S.robot.y/CELL)};
+  const goal={c:S.target.c,r:S.target.r};
+  if(blocked(start.c,start.r))return[];
+  const cost=(c,r)=>{
+    if(blocked(c,r))return Infinity;
+    let g=1;
+    if(policy.margin>0&&nearObstacle(c,r,policy.margin))g+=policy.marginCost;
+    for(const d of S.dangers){
+      const dist=Math.hypot(c-d.cx,r-d.cy),R=d.r+policy.dangerR;
+      if(dist<R)g+=policy.dangerCost*(1-dist/R);
+    }
+    return g;
+  };
+  const open=[{c:start.c,r:start.r,g:0,f:0,p:null}],seen=new Map();
+  const key=(c,r)=>c+','+r;seen.set(key(start.c,start.r),0);
+  while(open.length){
+    open.sort((a,b)=>a.f-b.f);
+    const cur=open.shift();
+    if(cur.c===goal.c&&cur.r===goal.r){
+      const path=[];let n=cur;
+      while(n){path.unshift({c:n.c,r:n.r});n=n.p;}
+      return path;
+    }
+    const dirs=policy.diag?[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]
+                           :[[1,0],[-1,0],[0,1],[0,-1]];
+    for(const[dc,dr]of dirs){
+      const nc=cur.c+dc,nr=cur.r+dr;
+      if(blocked(nc,nr))continue;
+      const step=(dc&&dr?1.414:1)*cost(nc,nr);
+      if(!isFinite(step))continue;
+      const ng=cur.g+step;
+      const k=key(nc,nr);
+      if(seen.has(k)&&seen.get(k)<=ng)continue;
+      seen.set(k,ng);
+      open.push({c:nc,r:nr,g:ng,f:ng+Math.hypot(goal.c-nc,goal.r-nr),p:cur});
+    }
+  }
+  return[];
+}
+
+/* ============ 反射层（本地基线：不规划，只躲）============ */
+function reflexSteer(){
+  const tx=(S.target.c+.5)*CELL,ty=(S.target.r+.5)*CELL;
+  let ang=Math.atan2(ty-S.robot.y,tx-S.robot.x);
+  // 前视探测：撞墙就转向
+  const look=CELL*1.6;
+  const probe=(a)=>{const px=S.robot.x+Math.cos(a)*look,py=S.robot.y+Math.sin(a)*look;
+    return blocked(Math.floor(px/CELL),Math.floor(py/CELL))||inDanger(px/CELL-0.5,py/CELL-0.5,-0.3);};
+  if(probe(ang)){
+    for(let t=30;t<=180;t+=25){
+      if(!probe(ang+t*Math.PI/180)){ang+=t*Math.PI/180;break;}
+      if(!probe(ang-t*Math.PI/180)){ang-=t*Math.PI/180;break;}
+    }
+  }
+  S.robot.ang+=(function(a,b){let d=a-b;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;})(ang,S.robot.ang)*.25;
+  return{vx:Math.cos(S.robot.ang),vy:Math.sin(S.robot.ang)};
+}
+
+/* ============ 事件与审计 ============ */
+function logEvent(txt){
+  const t=new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  S.events.unshift({t,txt});
+  if(S.events.length>40)S.events.pop();
+  renderEvents();
+}
+function pushAudit(idx){
+  const src=S.serving;
+  let line;
+  if(src==='A'||src==='B'){
+    const rtt=S.rtts[S.rtts.length-1];
+    line=`#${String(idx).padStart(4,'0')} 模块${src} ✓MODULE_OK ${rtt}ms`;
+  }else if(src==='FB'){
+    line=`#${String(idx).padStart(4,'0')} ✗FALLBACK → 恒等降级（反射层接管）`;
+  }else{
+    line=`#${String(idx).padStart(4,'0')} — PASSTHROUGH（本地反射直通）`;
+  }
+  S.audit.unshift({line,cls:src==='A'?'okA':src==='B'?'okB':src==='FB'?'fb':'pt'});
+  if(S.audit.length>26)S.audit.pop();
+  renderAudit();
+}
+
+/* ============ 决策步（650ms 一次 = token 边界）============ */
+let decisionIdx=0, decisionTimer=0, fallbackLogged=false;
+function decisionStep(){
+  decisionIdx++;
+  // 冷启动握手期间不产生模块决策
+  if(S.handshake)return;
+  // 换挡在决策边界原子生效
+  if(S.pendingSwap){
+    const old=S.activeModule;
+    S.activeModule=S.pendingSwap;S.pendingSwap=null;
+    S.markers.push({x:S.robot.x,y:S.robot.y,from:old,to:S.activeModule});
+    logEvent(`⟳ SWAP_APPLIED ${old}→${S.activeModule}（决策边界 #${decisionIdx}，零间隙）`);
+  }
+  let src;
+  if(!S.activeModule){src='PT';}
+  else if(!S.network||!S.moduleAlive){src='FB';}
+  else{src=S.activeModule;}
+  S.serving=src;
+  if(src==='A'||src==='B'){
+    const rtt=(7+Math.random()*4.6).toFixed(1);
+    S.rtts.push(parseFloat(rtt));if(S.rtts.length>60)S.rtts.shift();
+    S.waypoints=plan(POLICY[src]);
+    if(!fallbackLogged)logEvent(`✓ 模块${src} 恢复服务（MODULE_OK）`);
+    fallbackLogged=false;
+  }else{
+    S.waypoints=[];
+    if(src==='FB'&&!fallbackLogged){
+      logEvent(S.network?'⚠ 模块进程死亡 → 恒等门降级，机器人继续（变笨不死）'
+                        :'⚠ 网络断开 → 恒等门降级，反射层接管（fail-closed）');
+      fallbackLogged=true;
+    }
+    if(src==='PT')fallbackLogged=false;
+  }
+  S.stats[src]++;S.stats.total++;
+  pushAudit(decisionIdx);
+  renderStats();
+}
+
+/* ============ 移动 ============ */
+let stuckTicks=0;
+function move(dt){
+  let vx,vy;
+  if((S.serving==='A'||S.serving==='B')&&S.waypoints.length>1){
+    // 跟随云端规划的路径
+    const wp=S.waypoints[1];
+    const tx=(wp.c+.5)*CELL,ty=(wp.r+.5)*CELL;
+    const dx=tx-S.robot.x,dy=ty-S.robot.y,d=Math.hypot(dx,dy);
+    if(d<8){S.waypoints.shift();return;}
+    vx=dx/d;vy=dy/d;
+    S.robot.ang=Math.atan2(vy,vx);
+    stuckTicks=0;
+  }else{
+    const s=reflexSteer();vx=s.vx;vy=s.vy;
+    // 检测卡死
+    const nx=S.robot.x+vx*2,ny=S.robot.y+vy*2;
+    if(blocked(Math.floor(nx/CELL),Math.floor(ny/CELL)))stuckTicks++;
+    if(stuckTicks>26){ // 本地反射也会挣脱（简单随机重定向）
+      S.robot.ang+=Math.PI*(0.5+Math.random());
+      stuckTicks=0;
+    }
+  }
+  const sp=1.9;
+  S.robot.x+=vx*sp;S.robot.y+=vy*sp;
+  S.robot.x=Math.max(12,Math.min(COLS*CELL-12,S.robot.x));
+  S.robot.y=Math.max(12,Math.min(ROWS*CELL-12,S.robot.y));
+  // 轨迹记录（带来源）
+  S.trail.push({x:S.robot.x,y:S.robot.y,src:S.handshake?S.serving:(S.activeModule&&(S.network&&S.moduleAlive)?S.activeModule:(S.activeModule?'FB':'PT'))});
+  if(S.trail.length>4000)S.trail.shift();
+  // 到达目标
+  const tdx=(S.target.c+.5)*CELL-S.robot.x,tdy=(S.target.r+.5)*CELL-S.robot.y;
+  if(Math.hypot(tdx,tdy)<14){
+    S.targetCount++;newTarget();
+    logEvent(`🏁 到达目标 #${S.targetCount}，生成新目标`);
+    if(S.activeModule&&(S.network&&S.moduleAlive)&&!S.handshake)S.waypoints=plan(POLICY[S.activeModule]);
+    renderStats();
+  }
+}
+
+/* ============ 渲染主画布 ============ */
+const arena=document.getElementById('arena'),actx=arena.getContext('2d');
+function drawArena(t){
+  const W=COLS*CELL,H=ROWS*CELL;
+  actx.clearRect(0,0,W,H);
+  // 网格
+  actx.strokeStyle='rgba(120,130,255,.055)';actx.lineWidth=1;
+  for(let c=0;c<=COLS;c++){actx.beginPath();actx.moveTo(c*CELL,0);actx.lineTo(c*CELL,H);actx.stroke();}
+  for(let r=0;r<=ROWS;r++){actx.beginPath();actx.moveTo(0,r*CELL);actx.lineTo(W,r*CELL);actx.stroke();}
+  // 危险区（脉冲）
+  for(const d of S.dangers){
+    const px=(d.cx+.5)*CELL,py=(d.cy+.5)*CELL,pr=d.r*CELL;
+    const pulse=.14+.08*Math.sin(t/500+d.cx);
+    const g=actx.createRadialGradient(px,py,pr*.2,px,py,pr);
+    g.addColorStop(0,`rgba(255,70,70,${pulse+.16})`);g.addColorStop(1,'rgba(255,70,70,0)');
+    actx.fillStyle=g;actx.beginPath();actx.arc(px,py,pr,0,7);actx.fill();
+    actx.strokeStyle=`rgba(255,92,92,${.28+.12*Math.sin(t/500)})`;
+    actx.setLineDash([5,5]);actx.beginPath();actx.arc(px,py,pr,0,7);actx.stroke();actx.setLineDash([]);
+    actx.fillStyle='rgba(255,120,120,.5)';actx.font='10px sans-serif';
+    actx.fillText('危险区',px-14,py+3);
+  }
+  // 障碍
+  for(const o of S.obstacles){
+    const g=actx.createLinearGradient(o.c*CELL,o.r*CELL,(o.c+o.w)*CELL,(o.r+o.h)*CELL);
+    g.addColorStop(0,'rgba(90,100,190,.4)');g.addColorStop(1,'rgba(60,70,150,.25)');
+    actx.fillStyle=g;
+    roundRect(o.c*CELL+2,o.r*CELL+2,o.w*CELL-4,o.h*CELL-4,6);actx.fill();
+    actx.strokeStyle='rgba(140,150,255,.35)';actx.lineWidth=1;actx.stroke();
+  }
+  // 目标
+  if(S.target){
+    const tx=(S.target.c+.5)*CELL,ty=(S.target.r+.5)*CELL;
+    const rr=9+2.5*Math.sin(t/300);
+    actx.strokeStyle='#ffd76e';actx.lineWidth=2;
+    actx.beginPath();actx.arc(tx,ty,rr,0,7);actx.stroke();
+    actx.fillStyle='rgba(255,215,110,.25)';actx.beginPath();actx.arc(tx,ty,5,0,7);actx.fill();
+  }
+  // 轨迹（按来源分段着色）
+  actx.lineWidth=2.5;actx.lineCap='round';
+  for(let i=1;i<S.trail.length;i++){
+    const a=S.trail[i-1],b=S.trail[i];
+    if(Math.hypot(a.x-b.x,a.y-b.y)>CELL*2.5)continue;
+    actx.strokeStyle=SRC_COLOR[b.src]||SRC_COLOR.PT;
+    actx.globalAlpha=.75;
+    actx.beginPath();actx.moveTo(a.x,a.y);actx.lineTo(b.x,b.y);actx.stroke();
+  }
+  actx.globalAlpha=1;
+  // 换挡边界标记
+  for(const m of S.markers){
+    actx.save();actx.translate(m.x,m.y);actx.rotate(Math.PI/4);
+    actx.fillStyle='#fff';actx.globalAlpha=.95;
+    actx.fillRect(-4.5,-4.5,9,9);
+    actx.restore();
+    actx.fillStyle='rgba(255,255,255,.85)';actx.font='10px sans-serif';
+    actx.fillText(`${m.from}→${m.to}`,m.x+9,m.y-8);
+  }
+  // 规划路径预览
+  if((S.serving==='A'||S.serving==='B')&&S.waypoints.length>1){
+    actx.strokeStyle=SRC_COLOR[S.serving];actx.globalAlpha=.22;actx.lineWidth=1.5;
+    actx.setLineDash([4,6]);actx.beginPath();
+    actx.moveTo(S.robot.x,S.robot.y);
+    for(let i=1;i<S.waypoints.length;i++)
+      actx.lineTo((S.waypoints[i].c+.5)*CELL,(S.waypoints[i].r+.5)*CELL);
+    actx.stroke();actx.setLineDash([]);actx.globalAlpha=1;
+  }
+  // 机器人（俯视人形）
+  const rx=S.robot.x,ry=S.robot.y,ra=S.robot.ang;
+  const glow=actx.createRadialGradient(rx,ry,2,rx,ry,22);
+  const gc=S.serving==='A'?[179,105,255]:S.serving==='B'?[255,215,110]:
+           S.serving==='FB'?[255,92,92]:[138,147,176];
+  glow.addColorStop(0,`rgba(${gc},.5)`);glow.addColorStop(1,`rgba(${gc},0)`);
+  actx.fillStyle=glow;actx.beginPath();actx.arc(rx,ry,22,0,7);actx.fill();
+  actx.save();actx.translate(rx,ry);actx.rotate(ra);
+  actx.fillStyle='#e8ecff';
+  actx.beginPath();actx.arc(0,-7,4.2,0,7);actx.fill();      // 头（朝向为 -y 前方）
+  actx.beginPath();actx.ellipse(0,2,6,8,0,0,7);actx.fill(); // 躯干
+  actx.strokeStyle='#cfd6ff';actx.lineWidth=2.4;actx.lineCap='round';
+  actx.beginPath();actx.moveTo(-5,-1);actx.lineTo(-6,-9);actx.stroke();   // 左臂
+  actx.beginPath();actx.moveTo(5,-1);actx.lineTo(6,-9);actx.stroke();   // 右臂
+  actx.beginPath();actx.moveTo(-2.5,9);actx.lineTo(-3,16);actx.stroke(); // 左腿
+  actx.beginPath();actx.moveTo(2.5,9);actx.lineTo(3,16);actx.stroke();   // 右腿
+  // 感知扫描扇形
+  const scan=actx.createRadialGradient(0,-14,2,0,-14,26);
+  scan.addColorStop(0,`rgba(${gc},.35)`);scan.addColorStop(1,`rgba(${gc},0)`);
+  actx.fillStyle=scan;actx.beginPath();
+  actx.moveTo(0,0);actx.arc(0,0,28,-Math.PI*.78,-Math.PI*.22);actx.closePath();actx.fill();
+  actx.restore();
+}
+function roundRect(x,y,w,h,r){
+  actx.beginPath();actx.moveTo(x+r,y);actx.arcTo(x+w,y,x+w,y+h,r);
+  actx.arcTo(x+w,y+h,x,y+h,r);actx.arcTo(x,y+h,x,y,r);actx.arcTo(x,y,x+w,y,r);actx.closePath();
+}
+
+/* ============ 链路条（数据面粒子）============ */
+const lcv=document.getElementById('linkCanvas'),lctx=lcv.getContext('2d');
+let particles=[];
+function drawLink(t,dt){
+  const zone=document.querySelector('.linkzone');
+  lcv.width=zone.clientWidth;lcv.height=zone.clientHeight;
+  lctx.clearRect(0,0,lcv.width,lcv.height);
+  const y=lcv.height/2;
+  const x0=2,x1=lcv.width-2;
+  const active=S.activeModule&&S.network&&S.moduleAlive&&!S.handshake;
+  const hs=S.handshake;
+  // 链路线
+  lctx.lineWidth=2;
+  if(hs){
+    lctx.strokeStyle='rgba(255,215,110,.8)';lctx.setLineDash([4,4]);
+    lctx.lineDashOffset=-t/30;
+  }else if(active){
+    lctx.strokeStyle=SRC_COLOR[S.activeModule];lctx.setLineDash([]);
+    lctx.shadowColor=SRC_COLOR[S.activeModule];lctx.shadowBlur=8;
+  }else if(S.activeModule&&(S.network&&!S.moduleAlive)){
+    lctx.strokeStyle='rgba(255,92,92,.7)';lctx.setLineDash([2,5]);
+  }else if(!S.network&&S.activeModule){
+    lctx.strokeStyle='rgba(255,92,92,.55)';lctx.setLineDash([2,5]);
+    // 断点 ×
+    const mx=lcv.width/2;
+    lctx.setLineDash([]);lctx.lineWidth=2.5;lctx.strokeStyle='#ff5c5c';
+    lctx.beginPath();lctx.moveTo(mx-8,y-8);lctx.lineTo(mx+8,y+8);
+    lctx.moveTo(mx+8,y-8);lctx.lineTo(mx-8,y+8);lctx.stroke();
+  }else{
+    lctx.strokeStyle='rgba(130,140,255,.18)';lctx.setLineDash([3,7]);
+  }
+  lctx.beginPath();lctx.moveTo(x0,y);
+  lctx.bezierCurveTo(lcv.width*.3,y-14,lcv.width*.7,y+14,x1,y);
+  lctx.stroke();lctx.shadowBlur=0;
+  // 粒子（上行感知 / 下行 refined）
+  if(active){
+    if(Math.random()<.3)particles.push({p:0,dir:Math.random()<.5?1:-1,c:SRC_COLOR[S.activeModule]});
+    for(const pt of particles){
+      pt.p+=dt/900*(pt.dir>0?1:1)*0.55;
+      const u=pt.dir>0?pt.p:1-pt.p;
+      const px=x0+(x1-x0)*u;
+      const py=y+Math.sin(Math.PI*u)* -14*(pt.dir>0?1:-1)*0+ (u*2-1)*7;
+      lctx.fillStyle=pt.c;lctx.globalAlpha=.9;
+      lctx.beginPath();lctx.arc(px,py+(pt.dir>0?-7:7),2.2,0,7);lctx.fill();
+      lctx.globalAlpha=1;
+    }
+    particles=particles.filter(pt=>pt.p<1.05);
+  }else particles=[];
+}
+
+/* ============ UI 渲染 ============ */
+const $=id=>document.getElementById(id);
+function renderStats(){
+  $('stTotal').textContent=S.stats.total;
+  $('stFall').textContent=S.stats.FB;
+  $('stTargets').textContent=S.targetCount;
+  const t=Math.max(1,S.stats.total);
+  const bars=$('srcBar').children;
+  bars[0].style.width=(S.stats.A/t*100)+'%';
+  bars[1].style.width=(S.stats.B/t*100)+'%';
+  bars[2].style.width=(S.stats.FB/t*100)+'%';
+  bars[3].style.width=(S.stats.PT/t*100)+'%';
+  if(S.rtts.length){
+    const s=[...S.rtts].sort((a,b)=>a-b);
+    $('rttVal').textContent=s[Math.floor(s.length/2)].toFixed(1)+' ms';
+  }
+  // 当前模式徽标
+  let mode='当前：反射基线',color='var(--grey)';
+  if(S.handshake){mode='冷启动握手中…';color='var(--gold)';}
+  else if(S.activeModule&&S.network&&S.moduleAlive){mode=`当前：模块${S.activeModule} 服务中`;color=S.activeModule==='A'?'var(--purple)':'var(--gold)';}
+  else if(S.activeModule){mode='降级模式（反射层）';color='var(--red)';}
+  const m=$('mode');m.textContent=mode;m.style.color=color;
+  if(S.pendingSwap&&!S.handshake){mode+=' ⏳待换挡';}
+}
+function renderAudit(){
+  $('audit').innerHTML=S.audit.map(a=>`<div class="${a.cls}">${a.line}</div>`).join('');
+}
+function renderEvents(){
+  $('events').innerHTML=S.events.map(e=>`<div><b>${e.t}</b> ${e.txt}</div>`).join('');
+}
+function renderLinkInfo(){
+  const li=$('linkInfo');
+  if(S.handshake){li.textContent=`数据面：READY 握手中 ${S.handshake.t.toFixed(0)}/${S.handshake.dur}ms（冷启动）`;li.style.color='var(--gold)';}
+  else if(S.activeModule&&S.network&&S.moduleAlive){
+    li.textContent=`数据面：模块${S.activeModule} 每640ms 往返 · hidden[1,4096]·fp32 · RTT≈8ms`;
+    li.style.color=SRC_COLOR[S.activeModule];
+  }else if(S.activeModule&&!S.network){li.textContent='数据面：✂ 网络已断开（公网隧道中断）';li.style.color='var(--red)';}
+  else if(S.activeModule&&!S.moduleAlive){li.textContent='数据面：模块进程已崩溃（心跳消失）';li.style.color='var(--red)';}
+  else{li.textContent='数据面：空闲（未挂载模块）';li.style.color='var(--dim)';}
+}
+function renderNarr(){
+  const n=$('narr');
+  if(S.handshake){n.innerHTML=`模块进程冷启动中——<b>spawn→READY ≈1.35s</b>（Windows 实测值）。就绪握手是注册协商的最后一环：没有它，健康检查会把"还在启动"误判成"已死亡"。`;return;}
+  if(S.activeModule&&S.network&&S.moduleAlive){
+    const pol=S.activeModule==='A'?'避开所有危险区、绕开障碍物安全边际':'抄近道、贴边切割危险区';
+    n.innerHTML=`<b>云端大脑（模块${S.activeModule}）正在规划</b>：${pol}。本地反射层只做毫秒级避障兜底——注意轨迹颜色（${S.activeModule==='A'?'紫':'金'}）与<strong>决策审计</strong>里每一步的归因。`;
+  }else if(S.activeModule&&!S.network){
+    n.innerHTML=`<b>网络断了，但机器人没死。</b>恒等门降级（fail-closed）：正在生成的运动流不中断，只是从"云端规划"退回"本地反射"——<strong>变笨，不变瞎</strong>。恢复网络试试。`;
+  }else if(S.activeModule&&!S.moduleAlive){
+    n.innerHTML=`<b>模块进程被 kill 了。</b>与 S2-D 同款语义：宿主当步检测到无响应→恒等直通。外置后门/故障是<strong>运行时、可恢复的</strong>——重新插入一个新进程即可（fresh READY）。`;
+  }else{
+    n.innerHTML=`<b>纯本地反射基线</b>：没有云端大脑，机器人只靠毫秒级反射贪心走向目标——会犹豫、会贴边、会被卡住再挣脱。插入模块 A 或 B，看同一张地图上路线的<strong>质变</strong>。`;
+  }
+}
+
+/* ============ 按钮 ============ */
+function startHandshake(mod){
+  if(S.handshake)return;
+  S.handshake={t:0,dur:1350,module:mod};
+  logEvent(`⇪ 部署模块${mod} → ABI 协商 ✓（layer=blk.16·dim=4096·fp32）→ 冷启动…`);
+  $('hsText').style.display='block';$('hsBar').style.display='block';
+  $('hsText').textContent='spawn → READY 握手中…';
+}
+$('btnA').onclick=()=>{if(S.activeModule==='A'||S.handshake)return;startHandshake('A');};
+$('btnB').onclick=()=>{
+  if(S.handshake)return;
+  if(!S.activeModule){startHandshake('B');return;}
+  if(S.activeModule==='B')return;
+  S.pendingSwap='B';
+  logEvent(`⏳ SWAP_REQUESTED A→B（将在下一个决策边界原子生效）`);
+};
+$('btnDetach').onclick=()=>{
+  if(!S.activeModule||S.handshake)return;
+  logEvent(`⏏ DETACH 模块${S.activeModule} → 恢复反射基线（拔除可逆）`);
+  S.activeModule=null;S.moduleAlive=false;S.waypoints=[];
+};
+$('btnCrash').onclick=()=>{
+  if(!S.activeModule||!S.moduleAlive||S.handshake)return;
+  S.moduleAlive=false;
+  logEvent(`💥 kill -9 模块${S.activeModule} 进程（零清理硬崩溃）→ 等待看门狗`);
+};
+$('btnNet').onclick=()=>{
+  S.network=!S.network;
+  logEvent(S.network?'🌐 网络已恢复（公网隧道重连）':'✂ 网络已断开');
+};
+$('btnReset').onclick=()=>{
+  genMap();S.trail=[];S.markers=[];S.audit=[];S.rtts=[];
+  S.stats={A:0,B:0,FB:0,PT:0,total:0};S.targetCount=0;
+  S.activeModule=null;S.moduleAlive=false;S.pendingSwap=null;S.handshake=null;
+  decisionIdx=0;fallbackLogged=false;S.waypoints=[];
+  $('hsText').style.display='none';$('hsBar').style.display='none';
+  logEvent('🔄 实验已重置（新地图）');
+  renderStats();renderAudit();
+};
+function syncButtons(){
+  $('btnA').disabled=!!S.handshake||S.activeModule==='A';
+  $('btnB').disabled=!!S.handshake||S.activeModule==='B';
+  $('btnDetach').disabled=!S.activeModule||!!S.handshake;
+  $('btnCrash').disabled=!S.activeModule||!S.moduleAlive||!!S.handshake;
+  $('btnNet').textContent=S.network?'断网 / 恢复\n（公网隧道）':'恢复网络\n（当前已断网）';
+  $('btnNet').classList.toggle('danger',!S.network);
+  // 心跳
+  const rh=$('robotHb');rh.className='hb';
+  const ch=$('cloudHb');
+  if(S.handshake){ch.className='hb';}
+  else if(S.activeModule&&S.moduleAlive&&S.network){ch.className='hb';}
+  else if(S.activeModule){ch.className='hb dead';}
+  else{ch.className='hb off';}
+  const ms=$('modState');
+  if(S.handshake){ms.textContent=`模块${S.handshake.module}·启动中`;ms.style.color='var(--gold)';}
+  else if(S.activeModule&&S.moduleAlive){ms.textContent=`模块${S.activeModule}·服务中`;ms.style.color=S.activeModule==='A'?'var(--purple)':'var(--gold)';}
+  else if(S.activeModule){ms.textContent='模块·已崩溃/失联';ms.style.color='var(--red)';}
+  else{ms.textContent='未部署';ms.style.color='var(--dim)';}
+}
+
+/* ============ 主循环 ============ */
+let last=performance.now();
+function loop(t){
+  const dt=Math.min(50,t-last);last=t;
+  // 握手推进
+  if(S.handshake){
+    S.handshake.t+=dt;
+    $('hsFill').style.width=Math.min(100,S.handshake.t/S.handshake.dur*100)+'%';
+    if(S.handshake.t>=S.handshake.dur){
+      S.activeModule=S.handshake.module;S.moduleAlive=true;
+      logEvent(`✓ READY 模块${S.activeModule} 就绪（1.35s）→ 开始服务`);
+      S.handshake=null;
+      $('hsText').style.display='none';$('hsBar').style.display='none';
+      $('hsFill').style.width='0%';
+      decisionStep();
+    }
+  }
+  // 决策节拍
+  decisionTimer+=dt;
+  if(decisionTimer>=640){decisionTimer=0;decisionStep();}
+  // 移动
+  if(!S.handshake||true)move(dt);
+  // 渲染
+  drawArena(t);
+  drawLink(t,dt);
+  renderLinkInfo();
+  syncButtons();
+  if(Math.floor(t/500)!==Math.floor((t-dt)/500))renderNarr();
+  requestAnimationFrame(loop);
+}
+
+/* ============ 启动 ============ */
+genMap();
+logEvent('🚀 演示启动：机器人本体（HOST）就绪，反射层常驻');
+logEvent('提示：先插入模块A看谨慎路线，再热换B看路线质变，然后断网看 fail-closed');
+renderStats();renderAudit();renderEvents();renderNarr();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

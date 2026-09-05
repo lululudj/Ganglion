@@ -29,6 +29,19 @@
 1. **模块冷启动 ≈ 1.35s**（Windows spawn + numpy 导入）→ 生产系统需进程池预热；READY 就绪握手必须作为注册协商的组成部分
 2. **进程终止可见性延迟 ≈ 125ms**（os._exit 后父进程 is_alive() 的观察延迟）→ 存活轮询不是及时探测器，**响应截止期看门狗才是可靠检测界**
 
+## 人形机器人演示 Demo（中英双语）
+
+`demo/` 目录是一个纯静态 HTML 交互演示——同一张地图、同一个机器人本体，实时可视化四语义在具身场景下的行为：
+
+- 中文版：[demo/robot_demo_cn.html](demo/robot_demo_cn.html) · English: [demo/robot_demo_en.html](demo/robot_demo_en.html)
+
+| 操作 | 可观察的现象 |
+|---|---|
+| 插入模块 A「谨慎导航」 | 冷启动 READY 握手（1.35s）→ 路线绕开全部危险区 |
+| 热换模块 B「激进导航」 | 决策边界原子换挡（白色菱形标记），路线质变为贴边抄近道 |
+| 崩溃注入 / 断网 | fail-closed 恒等降级：**变笨不死**，运动流零中断，恢复后自动重升 |
+| 决策审计轨迹 | 逐步归因：MODULE_OK / FALLBACK / PASSTHROUGH + RTT |
+
 ## 目录结构
 
 ```
@@ -44,6 +57,7 @@ ganglion/
   PAPER_GANGLION_CN.md  # 论文草稿（中文版，v0.2 含跨机验证）
   PAPER_GANGLION_EN.md  # Paper draft (English, v0.2 with §0 release/priority timestamps)
   cloud/             # S5/S6 跨机实验：云端 8B 宿主 + 本地模块/起草器 + 全部结果 JSON
+  demo/              # 人形机器人交互演示（中英双语纯静态 HTML + 验证截图）
 ```
 
 ## 快速开始
