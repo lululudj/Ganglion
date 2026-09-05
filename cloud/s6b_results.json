@@ -1,0 +1,39 @@
+{
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "k": 5,
+  "n": 48,
+  "A_target_only": {
+    "tok_per_s": 27.42
+  },
+  "B_draft_only": {
+    "tok_per_s": 55.48
+  },
+  "C_speculative": {
+    "tok_per_s": 19.52,
+    "speedup_vs_target": 0.71,
+    "gt_2x": false,
+    "accept_per_round_mean": 2.36,
+    "accept_dist": {
+      "n": 22,
+      "p50": 2,
+      "mean": 2.4
+    },
+    "draft_ms": {
+      "n": 22,
+      "p50": 95.0,
+      "mean": 93.6
+    },
+    "verify_ms": {
+      "n": 22,
+      "p50": 26.0,
+      "mean": 27.4
+    },
+    "text": " the brain is not a single, unified system but rather a collection of specialized modules that are r"
+  },
+  "texts_match": {
+    "A": " the brain is not a single, unified system but rather a coll",
+    "C": " the brain is not a single, unified system but rather a coll",
+    "same_prefix_quality": true
+  },
+  "output_equals_target_greedy": false
+}

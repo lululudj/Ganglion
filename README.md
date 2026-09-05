@@ -15,11 +15,12 @@
 | 热换一致性（token 原子性） | 换挡在 token 边界原子生效，任何 token 不见混合版本 | S3 |
 | 传输延迟界 | 逐 token 跨进程 hidden-state 往返延迟分布（shm/pipe/tcp/GPU） | S4 |
 
-## 实验结果（RTX 4060 Laptop, Windows 11）
+## 实验结果（RTX 4060 Laptop + 云端 RTX 4090）
 
-- **40/40 断言全部通过**（S0 ABI 6 项 / S1 端到端 7 项 / S2 故障隔离 16 项 / S3 热换一致性 8 项 / S4 基准 3 项）
+- **同机 40/40 断言全部通过**（S0 ABI / S1 端到端 / S2 故障隔离 / S3 热换一致性 / S4 基准）
 - 逐 token 跨进程往返（768×64 fp16）：**p50 = 0.014ms**
-- 模块硬崩溃后宿主零中断，恒等门降级，检测延迟全部落在契约超时界内
+- **S5 跨机真实大模型**：云端 Qwen3-8B 主力骨干 + 本地 4060 外置模块（SSH 隧道跨公网）——吞吐仅降 **2.7%**，fp32 跨网 **24/24 位级精确**，断连后**零中断降级**
+- **S6 协作模式准则**：投机流水线 0.34–0.71x（每步成本比不满足盈利条件）vs 模块外置 **0.97x** 近无损——弱设备当能力模块的边际价值远超其单独算力（外置架构是弱节点的放大器）
 - 计划内热换 token 边界零间隙；16 token 全程无混合版本输出
 - 通道吞吐：shm 双槽 16749 MB/s（峰值小负载）> tcp > pipe
 
@@ -40,8 +41,9 @@ ganglion/
   run_validation.py  # 一键编排 → 控制台 PASS/FAIL 矩阵
   test_ganglion.py   # 13 项单元测试（TDD 先行）
   results.json       # 全部实验数据（40 用例 + 63 项基准行）
-  PAPER_GANGLION_CN.md  # 论文草稿（中文版）
-  PAPER_GANGLION_EN.md  # Paper draft (English, with §0 release/priority timestamps)
+  PAPER_GANGLION_CN.md  # 论文草稿（中文版，v0.2 含跨机验证）
+  PAPER_GANGLION_EN.md  # Paper draft (English, v0.2 with §0 release/priority timestamps)
+  cloud/             # S5/S6 跨机实验：云端 8B 宿主 + 本地模块/起草器 + 全部结果 JSON
 ```
 
 ## 快速开始

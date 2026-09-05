@@ -1,0 +1,52 @@
+{
+  "model": "/root/autodl-tmp/Qwen3-8B",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "tap_layer": 16,
+  "n_tokens": 24,
+  "dim": 4096,
+  "A_baseline": {
+    "tokens_per_s": 23.15,
+    "per_token_ms": {
+      "n": 24,
+      "p50": 23.577,
+      "min": 23.167,
+      "max": 455.307,
+      "mean": 43.129
+    },
+    "text": " the brain is not a single, unified system but rather a collection of specialize"
+  },
+  "B_module": {
+    "tokens_per_s": 22.52,
+    "per_token_ms": {
+      "n": 24,
+      "p50": 42.36,
+      "min": 37.619,
+      "max": 56.183,
+      "mean": 44.316
+    },
+    "module_rtt_ms": {
+      "n": 24,
+      "p50": 8.341,
+      "min": 8.01,
+      "max": 22.657,
+      "mean": 10.174
+    },
+    "mismatch": 0,
+    "served": 24,
+    "fallback_at": null,
+    "text": " the brain is divided into different modules, which are responsible for differen"
+  },
+  "D_fault": {
+    "tokens_per_s": 26.69,
+    "served_before_fault": 6,
+    "fallback_at": 6,
+    "completed_tokens": 24,
+    "generation_survived": true,
+    "text": " the brain is divided into different modules, each responsible for a specific fu"
+  },
+  "checks": {
+    "module_changes_output": true,
+    "numerics_bit_exact": true,
+    "fault_survived": true
+  }
+}

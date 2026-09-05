@@ -1,0 +1,39 @@
+{
+  "experiment": "S6 跨机投机解码（本地0.6B起草+云端8B验证）",
+  "draft_model": "Qwen/Qwen3-0.6B",
+  "draft_gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "k_draft": 5,
+  "n_tokens": 52,
+  "spec_tok_per_s": 9.37,
+  "acceptance": {
+    "mean_per_round": 2.48,
+    "rate_vs_k": 0.495,
+    "dist": {
+      "n": 21,
+      "p50": 2,
+      "mean": 2.5,
+      "max": 6
+    }
+  },
+  "latency_ms": {
+    "draft_k_tokens": {
+      "n": 21,
+      "p50": 202.3,
+      "mean": 222.2,
+      "max": 620.1
+    },
+    "verify_rtt_incl_cloud_forward": {
+      "n": 21,
+      "p50": 41.3,
+      "mean": 42.1,
+      "max": 52.3
+    },
+    "round_total": {
+      "n": 21,
+      "p50": 244.1,
+      "mean": 264.3,
+      "max": 668.1
+    }
+  },
+  "text": " the brain is not a single, unified system but rather a collection of specialized modules that are responsible for diffe"
+}

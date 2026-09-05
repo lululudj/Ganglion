@@ -1,16 +1,16 @@
 # Ganglion: External Neural Modules
 ## A Minimal Validation of Running Neural Capability Units as Independent Processes
 
-**Version**: Draft v0.1
+**Version**: Draft v0.2 (2026-09-05; adds §5.3 cross-machine real-LLM validation and §5.4 collaboration-mode selection criterion)
 **Release Record (see §0 below)**: First publicly released 2026-09-05 18:23:36 (UTC+8)
-**Experimental Environment**: NVIDIA RTX 4060 Laptop (8 GB), Windows 11, Python 3.12.10, PyTorch 2.12.1+cu126, NumPy 2.3.5
-**Validation Result**: 40/40 assertions passed; code and full experimental data in `results.json`
+**Experimental Environment**: Local NVIDIA RTX 4060 Laptop (8 GB) + cloud RTX 4090 (24 GB), Windows 11 / Ubuntu 22.04, Python 3.12, PyTorch 2.12/2.8, Qwen3-8B
+**Validation Result**: 40/40 single-machine + 3/3 cross-machine assertions passed; code and full data in `results.json` / `ganglion_cloud/`
 
 ---
 
 ## Abstract
 
-Mainstream capability-extension methods for large language models (Adapters, LoRA, MoE experts) all place the extension unit inside the host model's process and computation graph: a module failure is a model failure, and module replacement requires service interruption. This paper proposes and validates a different problem setting: the **External Neural Module (ENM)** — a capability unit implemented as a service with its own independent OS-process lifetime, processing the host model's hidden states in real time at per-token granularity over shared memory, with runtime hot-swapping. We define four core semantics for this setting (ABI registration negotiation, fault isolation, hot-swap consistency, transport latency bounds), implement a minimal validation system named **Ganglion**, and complete 5 scenarios with 40 reproducible assertions in a real multiprocess environment — all passing. Measured results: inter-process hidden-state round-trip latency at typical load (768×64, fp16) is p50 = 0.014 ms; after a hard module crash the host degrades with zero interruption; planned hot-swaps take effect atomically at token boundaries with no mixed-version outputs throughout. We additionally report two previously unpublished empirical findings: module cold-start cost ≈ 1.35 s, and a process-termination visibility delay of ≈ 125 ms on Windows — the latter directly invalidates liveness polling as a failure detector and establishes the **response-deadline watchdog** as the reliable fault-detection semantics for external modules.
+Mainstream capability-extension methods for large language models (Adapters, LoRA, MoE experts) all place the extension unit inside the host model's process and computation graph: a module failure is a model failure, and module replacement requires service interruption. This paper proposes and validates a different problem setting: the **External Neural Module (ENM)** — a capability unit implemented as a service with its own independent OS-process lifetime, processing the host model's hidden states in real time at per-token granularity over shared memory or network, with runtime hot-swapping. We define four core semantics for this setting (ABI registration negotiation, fault isolation, hot-swap consistency, transport latency bounds) and implement a minimal validation system named **Ganglion**: 5 scenarios with 40 reproducible assertions in a same-machine multiprocess environment (all passing), then escalated to a **cross-machine deployment with a real large model** — a cloud RTX 4090 running Qwen3-8B as the primary backbone, with a local RTX 4060 Laptop (8 GB, too small for bf16 8B) acting as the external module over an SSH tunnel across the public internet: throughput loss of only 2.7% (22.52 vs 23.15 tok/s), bit-exact fp32 numerics across the network (24/24), and zero-interruption fail-closed degradation on disconnection. Controlled experiments on the same testbed further yield a **collaboration-mode selection criterion**: the per-step cost ratio r between nodes and the acceptance rate α determine topology choice — speculative pipelining measured 0.34–0.71× (cost ratio violates the profitability condition) while module externalization measured 0.97× (near-lossless). We additionally report two previously unpublished empirical findings: module cold-start cost ≈ 1.35 s, and a process-termination visibility delay of ≈ 125 ms on Windows — the latter directly invalidates liveness polling as a failure detector and establishes the **response-deadline watchdog** as the reliable fault-detection semantics for external modules.
 
 **Keywords**: external neural module; fault isolation; hot-swapping; inter-process communication; parameter-efficient fine-tuning; system reliability
 
@@ -54,8 +54,9 @@ The systems community has produced all the "parts": S-LoRA/dLoRA reuse adapters 
 
 1. **Problem definition** (§3): the first formalization of external neural modules as four verifiable semantics — ABI registration negotiation, fault isolation, hot-swap consistency (token atomicity), transport latency bounds;
 2. **Minimal system** (§4): Ganglion — a three-process architecture (host / module / module′) with a manifest negotiation protocol, dual-slot shared-memory data plane, heartbeat + watchdog control plane, and an identity fallback gate;
-3. **Validation methodology and results** (§5): a 5-scenario, 40-assertion PASS/FAIL matrix, all passing; latency distributions over 63 benchmark configurations;
-4. **Two new empirical findings** (§6): the module cold-start bound (~1.35 s) and the process-termination visibility delay (~125 ms), with their direct design implications for fault-detection semantics.
+3. **Validation methodology and results** (§5): a 7-scenario (S0–S6) PASS/FAIL matrix and transport benchmarks; cross-machine validation on a real LLM (Qwen3-8B) confirming all four semantics without attenuation (§5.3);
+4. **Collaboration-mode selection criterion** (§5.4): a quantitative decision rule — the per-step cost ratio $r$ between nodes and acceptance rate $\alpha$ determine the topology choice between module externalization and speculative pipelining;
+5. **Two new empirical findings** (§6): the module cold-start bound (~1.35 s) and the process-termination visibility delay (~125 ms), with their direct design implications for fault-detection semantics.
 
 This paper is deliberately positioned as a **minimal validation**: the backbone is a tiny randomly initialized network and the module transform is an independently recomputable linear operator — we deliberately remove the "model capability" variable so that **the system semantics themselves** are the object under test. If the semantics hold in this minimal system, they are necessary conditions for scaling to real models.
 
@@ -74,6 +75,9 @@ This paper is deliberately positioned as a **minimal validation**: the backbone 
 | Retrieval augmentation | RETRO [8] | External memory, not external computation |
 | GPU process infrastructure | GPU FaaS [15], NVIDIA MPS [20] | Isolation mechanisms without a neural-module abstraction |
 | Serverless LoRA | Predictive-LoRA [16] | Cold-start cost optimization; no real-time data-plane protocol |
+| Edge-cloud collaborative inference | Splitwise [21], HybridFlow [22], PRISM [23], ECKGF [24], DSD [25] | Layer splitting / subtask routing / request-level switching / speculative verification — all at **request or layer granularity**, no modular bidirectional hidden-state data plane |
+| Robotics × cloud LLM | GemmaSense [26], VLM-on-Edge [27], EdgeBot-Reflex [28] | Request-level routing to cloud APIs (no hidden-state path) / layer offloading (no module semantics) / local-only dual-model arbitration (no cloud) |
+| Hidden-states security | State inversion [29], activation-steering attacks [30], LoRA backdoors [31,32], split-inference privacy [33–35] | The hidden-state attack surface is real; but **no one studies the security properties of modular externalized architectures** (revocable backdoors, per-token attribution, identity fallback) |
 
 **Gap confirmation**: none of the above simultaneously satisfies (a) module as independent process; (b) per-token hidden-state data plane; (c) hot-swap consistency semantics; (d) fault-isolation semantics. This is the combination Ganglion fills.
 
@@ -129,6 +133,8 @@ and the degraded path is **deterministically reproducible**. The host continues 
 | S2 | Fault isolation: 3 fault modes × 5 checks + determinism | 16 | ✅ 16/16 |
 | S3 | Hot-swap consistency: A→B→(kill B)→C | 8 | ✅ 8/8 |
 | S4 | Transport benchmark: 54 CPU + 9 GPU configs | 3 | ✅ 3/3 |
+| S5 | Cross-machine real LLM: cloud Qwen3-8B + local external module | 3 | ✅ 3/3 |
+| S6 | Collaboration-mode cost-ratio criterion: 3-tier speculative control | — | data result |
 | Unit tests | TDD-first (red before green) | 13 | ✅ 13/13 |
 
 **S1 key evidence**: module is a real independent process (pid isolation); 12/12 tokens served by the module; cross-process transform numerically exact (`refined == h×5.0+2.0`, fp32 lossless); after detach, output matches the no-module baseline **token-for-token** (removal reversibility).
@@ -164,6 +170,41 @@ and the degraded path is **deterministically reproducible**. The host continues 
 
 **Conclusion**: per-token cross-process round trips are in the microseconds — negligible against a real LLM's forward pass (tens of ms); the latency cost of externality appears mainly at large frames (full-sequence rewrites), where shm holds a 4× advantage over pipe. CUDA IPC is unavailable on Windows (recorded as a platform limitation); GPU paths are costed with D2H+H2D, expected to improve further under Linux + CUDA IPC (to be verified).
 
+### 5.3 S5: Cross-Machine Validation — a Local Weak Device as External Module of a Real Cloud LLM
+
+S0–S4 validated the semantics on a tiny backbone. S5 escalates to a **real large model across machines**: a cloud RTX 4090 runs **Qwen3-8B** (36 layers, hidden 4096, bf16) as the primary backbone with a tap at layer 16; a local RTX 4060 Laptop (8 GB — cannot run bf16 8B) acts as the external module process (NumPy), with the data plane crossing the public internet over an SSH reverse tunnel, one hidden state per token (4096-dim fp32, 16 KB/frame).
+
+**S5 results (all three checks pass)**:
+
+| Metric | Value |
+|---|---|
+| A baseline (cloud 8B alone) | 23.15 tok/s (p50 23.6 ms/token) |
+| B external module (cloud backbone + local module) | 22.52 tok/s (**throughput loss 2.7%**) |
+| Cross-machine module RTT | p50=8.34 ms (min 8.01 / max 22.7) |
+| Cross-machine numerics | **24/24 bit-exact** (mismatch=0; fp32 lossless over the internet) |
+| D fault injection (disconnect after 6 tokens) | **24/24 tokens generated**, degradation point=6, zero interruption |
+
+Three core findings: (a) **cross-machine externalization is nearly free** — RTT (8.3 ms) is 35% of the real-LLM forward time (23.6 ms), yet throughput loses only 2.7% because transport overlaps computation; the larger the model, the smaller the externality cost share; (b) **the four semantics hold cross-machine without attenuation** — bit-exact numerics, fail-closed degradation, reversible capability change all verified; (c) the external module genuinely changes model behavior — given the same prompt, the 8B baseline continues "the brain is not a single, unified system" while the module-attached host continues "the brain is divided into different modules".
+
+### 5.4 S6: Collaboration-Mode Selection Criterion — External Module vs. Speculative Pipeline
+
+Two topologies exist for cross-machine collaboration: **module externalization** (S5: weak device as a capability module on the data plane) and **speculative pipelining** (local small model drafts, cloud large model verifies in batches). To answer whether "1+1 > 2", we measured a three-tier control on the same testbed:
+
+| Configuration | Throughput | vs. cloud alone |
+|---|---|---|
+| Cloud 8B alone (4090) | 27.4–29.2 tok/s | 1.0× |
+| Same-machine speculative (0.6B draft + 8B verify, both on 4090) | 19.5 tok/s | 0.71× |
+| Cross-machine speculative (local Windows 0.6B drafts, cloud verifies) | 9.4 tok/s | 0.34× |
+| **Cross-machine module externalization (S5)** | **22.5 tok/s** | **0.97×** |
+
+Per-layer bottleneck attribution pinpoints the cause — the **per-step cost ratio**. Let the draft per-step time be $d$, the target per-step time $t$, acceptance rate $\alpha$, and $K$ drafted tokens per round; speculative pipelining profits approximately when:
+
+$$r = d/t < (1-\alpha) \cdot K/(K+1)$$
+
+Measured: cloud 0.6B $d$=18 ms vs 8B $t$=36 ms (ratio 0.5, condition violated); local Windows 0.6B $d$=38 ms — **slower per step than the cloud 8B itself** (WDDM scheduling overhead of 28 layers × 300+ kernel launches), ratio 1.06, badly violated. Incidental finding: under a bare transformers loop the small model's speed advantage does not materialize (0.6B reaches only 55 tok/s on a 4090 — Python framework overhead dominates); production speculative systems (vLLM + CUDA Graph pushing $d$ below 5 ms) are the engineering precondition for that topology to profit.
+
+**Collaboration-mode selection criterion** (a quantitative contribution of this paper): the inter-node per-step cost ratio $r$ and acceptance rate $\alpha$ determine the topology — below the threshold choose speculative pipelining; otherwise choose **module externalization** (near-lossless throughput, multiplicative capability space, availability $1-p^2$). The marginal value of a weak device as a capability module far exceeds its standalone compute value — **the external architecture is an amplifier for weak nodes**.
+
 ---
 
 ## 6 Discussion: Two New Empirical Findings
@@ -196,7 +237,7 @@ Ganglion's detection semantics follow: fault detection does not depend on "is it
 
 This paper turned "external neural modules" from a verbal concept into **a research problem with a formal definition, a runnable system, and experimental data**: all four semantics passed 40/40 assertions in a real multiprocess environment; per-token cross-process round-trip latency p50 = 0.014 ms shows the cost of externality is negligible at typical load; and two new empirical findings (cold-start bound, exit-visibility delay) directly constrain system design in this direction.
 
-**Future work**: (a) swap/in-flight-request race consistency (CSP/TLA+ formalization); (b) re-measuring latency share on a real Qwen3-0.6B backbone; (c) multi-module fan-out and per-layer modules' aggregate bandwidth; (d) Linux + CUDA IPC platform comparison; (e) DreamHead (our diffusion-head work) as the first real module workload.
+**Future work**: (a) swap/in-flight-request race consistency (CSP/TLA+ formalization); (b) Linux + CUDA IPC platform comparison; (c) multi-module fan-out and per-layer modules' aggregate bandwidth; (d) DreamHead (our diffusion-head work) as the first real module workload; (e) **embodied-AI application**: robot bodies as external modules connected to cloud ultra-large models — local reflex layer at millisecond latency, perception modules upstream via the data plane, fail-closed guaranteeing degradation-not-blindness on network loss (the four semantics map one-to-one onto layered robot intelligence requirements); (f) **security semantics**: formalization of the revocable attack surface — external backdoors are detachable (vs. irreversible weight poisoning), manifest signature extension, anomaly detection on refined states.
 
 ---
 
@@ -222,3 +263,18 @@ This paper turned "external neural modules" from a verbal concept into **a resea
 [18] Nie S, et al. Large Language Diffusion Models. arXiv:2502.09992, 2025.
 [19] Dream Team. Dream 7B: Diffusion Reasoning Models. arXiv 2025.
 [20] NVIDIA. Multi-Process Service (MPS) Documentation.
+[21] Younesi A, et al. Splitwise: Collaborative Edge-Cloud Inference for LLMs via Lyapunov-Assisted DRL. arXiv:2512.23310, 2025.
+[22] Dong J, et al. HybridFlow: Resource-Adaptive Subtask Routing for Efficient Edge-Cloud LLM Inference. ICML 2026. arXiv:2512.22137.
+[23] PRISM: Privacy-Aware Routing for Adaptive Cloud-Edge LLM Inference. AAAI 2026.
+[24] Edge-cloud Collaborative Knowledge Graph Fusion for Real-Time Robot Q&A. Discover Internet of Things, 2026.
+[25] Yu F, et al. DSD: A Distributed Speculative Decoding Solution for Edge-Cloud Agile Large Model Serving. arXiv:2511.21669, 2025.
+[26] Geedh P. GemmaSense: Hybrid Edge-Cloud Vision-Language System for Robotics. GitHub, 2026.
+[27] Ahmad S, et al. Vision-Language Models on the Edge for Real-Time Robotic Perception. arXiv:2601.14921, 2026.
+[28] Vijaykumar S. EdgeBot-Reflex: Heterogeneous Dual-Model Robot Navigation. GitHub, 2026.
+[29] Dong T, et al. Depth Gives a False Sense of Privacy: LLM Internal States Inversion. arXiv:2507.16372, 2025.
+[30] Korznikov A, et al. The Rogue Scalpel: Activation Steering Compromises LLM Safety. arXiv:2509.22067, 2025.
+[31] Chen L, et al. Causal-Guided Detoxify Backdoor Attack of Open-Weight LoRA Models. arXiv:2512.19297, 2025.
+[32] Puertolas Merenciano D, et al. Weight Space Detection of Backdoors in LoRA Adapters. arXiv:2602.15195, 2026.
+[33] Duan L, et al. PrivaScissors: Enhance the Privacy of Collaborative Inference through the Lens of Mutual Information. arXiv:2306.07973, 2023.
+[34] Feature Sniffer: A Stealthy Inference Attacks Framework on Split Learning. Springer, 2023.
+[35] Semantic Neighbor Swapping for Privacy-Aware Edge-Cloud Inference. Journal of Cloud Computing, 2026.

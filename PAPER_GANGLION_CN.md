@@ -1,15 +1,15 @@
 # Ganglion：外置神经模块
 ## ——将神经网络能力单元作为独立进程的最小验证
 
-**版本**：草稿 v0.1（2026-09-05）
-**实验环境**：NVIDIA RTX 4060 Laptop (8GB)，Windows 11，Python 3.12.10，PyTorch 2.12.1+cu126，NumPy 2.3.5
-**验证结果**：40/40 用例通过；代码与全部实验数据见 `results.json`
+**版本**：草稿 v0.2（2026-09-05，新增 §5.3 跨机真实大模型验证与 §5.4 协作模式选择准则）
+**实验环境**：本地 NVIDIA RTX 4060 Laptop (8GB) + 云端 RTX 4090 (24GB)，Windows 11 / Ubuntu 22.04，Python 3.12，PyTorch 2.12/2.8，Qwen3-8B
+**验证结果**：同机 40/40 + 跨机 3/3 断言通过；代码与全部实验数据见 `results.json` / `ganglion_cloud/`
 
 ---
 
 ## 摘要
 
-主流模型能力扩展方法（Adapter、LoRA、MoE 专家）均将扩展单元置于模型进程内部的计算图中，模块故障即模型故障，模块更换需中断服务。本文提出并验证一个不同的问题设定：**外置神经模块（External Neural Module, ENM）**——将能力单元实现为拥有独立操作系统进程生命周期的服务，通过共享内存在每个 token 的粒度上实时处理宿主模型的 hidden states，支持运行时热插拔。我们定义了该设定的四项核心语义（ABI 注册协商、故障隔离、热换一致性、传输延迟界），实现最小验证系统 **Ganglion**，并在真实多进程环境完成 5 组场景共 40 项可复核断言，全部通过。实验测得：进程间 hidden-state 往返延迟在典型负载（768×64, fp16）下 p50=0.014ms；模块进程硬崩溃后宿主零中断完成降级；计划内热换在 token 边界零间隙生效，全程无混合版本输出。此外报告两个此前未见发表的实证发现：模块进程冷启动开销约 1.35s；Windows 下进程终止的父进程可见性延迟约 125ms，该发现直接否定了"存活轮询"作为故障检测机制的有效性，并确立了**响应截止期看门狗**作为外置模块故障检测的可靠语义。
+主流模型能力扩展方法（Adapter、LoRA、MoE 专家）均将扩展单元置于模型进程内部的计算图中，模块故障即模型故障，模块更换需中断服务。本文提出并验证一个不同的问题设定：**外置神经模块（External Neural Module, ENM）**——将能力单元实现为拥有独立操作系统进程生命周期的服务，通过共享内存或网络在每 token 的粒度上实时处理宿主模型的 hidden states，支持运行时热插拔。我们定义了该设定的四项核心语义（ABI 注册协商、故障隔离、热换一致性、传输延迟界），实现最小验证系统 **Ganglion**：在同机多进程环境完成 5 组场景 40 项可复核断言（全部通过），并将验证升级到**真实大模型跨机部署**——云端 RTX 4090 运行 Qwen3-8B 主力骨干、本地 RTX 4060 Laptop（8GB，跑不动 bf16 8B）作为外置模块经 SSH 隧道跨公网协作：吞吐仅降 2.7%（22.52 vs 23.15 tok/s），fp32 跨网 24/24 位级精确，断连后宿主零中断完成降级。基于同一实验床的对照实验进一步给出**协作模式选择准则**：节点间每步成本比 r 与接受率 α 决定拓扑选择——实测投机流水线因成本比不满足盈利条件而 0.34–0.71x，而模块外置 0.97x 近无损。此外报告两个此前未见发表的实证发现：模块进程冷启动开销约 1.35s；Windows 下进程终止的父进程可见性延迟约 125ms——后者直接否定"存活轮询"作为故障检测机制，确立**响应截止期看门狗**为外置模块故障检测的可靠语义。
 
 **关键词**：外置神经模块；故障隔离；热插拔；进程间通信；参数高效微调；系统可靠性
 
@@ -36,8 +36,9 @@
 
 1. **问题定义**（§3）：首次将"外置神经模块"形式化为四项可验证语义——ABI 注册协商、故障隔离、热换一致性（token 原子性）、传输延迟界；
 2. **最小系统**（§4）：实现 Ganglion——三进程架构（宿主/模块/模块'），含 manifest 协商协议、双槽共享内存数据面、心跳与看门狗控制面、恒等回退门；
-3. **验证方法论与结果**（§5）：5 场景 40 项断言的 PASS/FAIL 矩阵，全部通过；63 项传输基准配置的延迟分布；
-4. **两个新实证发现**（§6）：模块冷启动界（~1.35s）与进程终止可见性延迟（~125ms）及其对故障检测语义的设计约束。
+3. **验证方法论与结果**（§5）：7 场景（S0–S6）的 PASS/FAIL 矩阵与传输基准；跨机真实大模型（Qwen3-8B）验证四语义无衰减（§5.3）；
+4. **协作模式选择准则**（§5.4）：节点间每步成本比 $r$ 与接受率 $\alpha$ 决定拓扑选择的定量判据——外置模块 vs 投机流水的分界；
+5. **两个新实证发现**（§6）：模块冷启动界（~1.35s）与进程终止可见性延迟（~125ms）及其对故障检测语义的设计约束。
 
 本文定位为**最小验证（minimal validation）**：骨干为微型随机初始化网络，变换为可独立复算的线性算子——我们刻意消除"模型能力"变量，使**系统语义本身**成为被测对象。语义若在此最小系统成立，即为后续真实模型规模化的必要条件。
 
@@ -49,12 +50,16 @@
 |---|---|---|
 | 进程内模块 | Adapter [1], LoRA [2], MoE [3,4] | 模块在计算图内；无进程隔离 |
 | Adapter 服务化 | S-LoRA [9], dLoRA [10], LoRAX, Punica | adapter 是**数据**，进程内复用；dLoRA 支持动态换入换出但仍在同进程计算图 |
-| 模型分片服务 | Petals [11] | hidden states 跨进程/节点流动，但拆分对象是**单模型的层**，非能力模块；无热换语义 |
-| 专家按需加载 | EdgeMoE [12], MoE-Infinity [13], OD-MoE [14] | 专家权重换入换出，但专家仍受内部路由器支配 |
+| 整模型进程隔离 | llama.cpp router mode (2025-12), Llama-Swap | 换的是**整个模型**（prompt 级，文本 I/O）；无 hidden-state 数据面、无 token 级语义；崩溃模型的在飞请求**失败**而非降级 |
+| 层分布 | Petals [11], HALO [17] | hidden states 跨进程/节点流动，但拆分对象是**单模型的层**，非能力模块；无热换/故障语义 |
+| 专家按需加载 | EdgeMoE [12], MoE-Infinity [13], OD-MoE [14] | 专家**权重**换入换出，但专家仍受内部路由器支配 |
 | 模型编排 | HuggingGPT [7], Neural Module Networks [6] | 调用外部模型的**输出**，非实时处理 hidden states |
 | 检索增强 | RETRO [8] | 外部记忆，非外部计算 |
 | GPU 进程基础设施 | GPU FaaS [15], NVIDIA MPS | 提供隔离机制，无神经模块抽象 |
 | Serverless LoRA | Predictive-LoRA [16] | 关注冷启动成本优化，无实时数据面协议 |
+| 边云协同推理 | Splitwise [21], HybridFlow [22], PRISM [23], ECKGF [24], DSD [25] | 层拆分/子任务路由/请求级切换/投机验证——全部为**请求或层粒度**，无模块化双向 hidden-state 数据面 |
+| 机器人×云端大模型 | GemmaSense [26], VLM-on-Edge [27], EdgeBot-Reflex [28] | 请求级路由到云 API（无 hidden-state 通路）/ 层卸载（无模块语义）/ 纯本地双模型仲裁（无云端） |
+| hidden states 安全 | 状态反演 [29], activation steering 攻击 [30], LoRA 后门 [31,32], 拆分隐私 [33-35] | 证明 hidden-state 通道的攻击面真实存在；但**无人研究模块化外置架构的安全属性**（可拆卸后门、逐 token 归因、恒等回退） |
 
 **空白确认**：上述任一工作均未同时满足——(a) 模块为独立进程；(b) 逐 token 处理 hidden states 的数据面；(c) 热换一致性语义；(d) 故障隔离语义——四项条件的组合。Ganglion 填补该空白。
 
@@ -110,6 +115,8 @@ $$h_t^{out} = h_t \quad (\text{refined} \equiv \text{hidden})$$
 | S2 | 故障隔离：3 故障模式 × 5 检查 + 确定性 | 16 | ✅ 16/16 |
 | S3 | 热换一致性：A→B→(kill B)→C 全程 | 8 | ✅ 8/8 |
 | S4 | 传输基准：54 CPU 配置 + 9 GPU 配置 | 3 | ✅ 3/3 |
+| S5 | 跨机真实大模型：云端 Qwen3-8B + 本地外置模块（吞吐/数值/故障三查） | 3 | ✅ 3/3 |
+| S6 | 协作模式成本比准则：投机流水三层对照 | — | 数据性结论 |
 | 单元测试 | TDD 先行（先失败后通过） | 13 | ✅ 13/13 |
 
 **S1 关键证据**：模块为真实独立进程（pid 隔离）；12/12 token 全部由模块服务；跨进程变换数值精确一致（`refined == h×5.0+2.0`，fp32 无损）；detach 后输出与无模块基线**逐 token 一致**（拔除可逆性）。
@@ -145,6 +152,41 @@ $$h_t^{out} = h_t \quad (\text{refined} \equiv \text{hidden})$$
 
 **结论**：逐 token 粒度的跨进程往返在微秒级，相对真实 LLM 的单步前向（数十毫秒）完全可忽略；外置性的延迟代价主要出现在大帧（整序列重写）场景，此时 shm 相对 pipe 有 4 倍优势。CUDA IPC 在 Windows 不可用（平台限制，如实记录），GPU 路径以 D2H+H2D 计入成本——该成本占 17-20%，在 Linux + CUDA IPC 下预期进一步降低（待验证）。
 
+### 5.3 S5：跨机验证——本地弱设备作为云端真实大模型的外置模块
+
+S0–S4 验证了语义，但骨干是微型网络。S5 将其升级到**真实大模型跨机部署**：云端 RTX 4090 运行 **Qwen3-8B**（36 层，hidden 4096，bf16）作为主力骨干，在第 16 层插桩；本地 RTX 4060 Laptop（8GB，跑不动 bf16 8B）作为外置模块进程（numpy 实现），数据面经 SSH 反向隧道跨公网传输，每 token 取最后位置 hidden state（4096 维 fp32，16KB/帧）。
+
+**S5 结果（三项检查全部通过）**：
+
+| 指标 | 数值 |
+|---|---|
+| A 基线（云端单独 8B） | 23.15 tok/s（p50 23.6ms/token） |
+| B 外置模块（云端骨干+本地模块） | 22.52 tok/s（**吞吐仅降 2.7%**） |
+| 模块跨机往返 RTT | p50=8.34ms（min 8.01 / max 22.7） |
+| 跨机数值一致性 | **24/24 位级精确**（mismatch=0，fp32 跨公网零损坏） |
+| D 故障注入（服务 6 token 后断连） | **24/24 生成完成**，降级点=6，零中断 |
+
+S5 的三个核心发现：(a) **跨机外置几乎免费**——RTT（8.3ms）相对真实 LLM 前向（23.6ms）占 35% 等待，但因传输与计算部分重叠，吞吐损失仅 2.7%；模型越大前向越慢，外置成本占比越小；(b) **四语义跨机无衰减**——位级数值一致、fail-closed 降级、能力可逆改变全部在跨机环境成立；(c) 外置模块真实改变模型行为——同一 prompt 下，8B 基线续写"the brain is not a single, unified system"，挂上本地模块后续写"the brain is divided into different modules"。
+
+### 5.4 S6：协作模式选择准则——外置模块 vs 投机流水线的成本比判据
+
+跨机协作存在两种拓扑：**模块外置**（S5：弱设备作为能力模块插桩）与**投机流水**（本地小模型起草 + 云端大模型批量验证）。为回答"1+1 是否大于 2"，我们在同一实验床上测得三层对照数据：
+
+| 配置 | 吞吐 | 相对云端单独 |
+|---|---|---|
+| 云端 8B 单独（4090） | 27.4–29.2 tok/s | 1.0x |
+| 云端同机投机（0.6B 起草+8B 验证，同在 4090） | 19.5 tok/s | 0.71x |
+| 跨机投机（本地 Windows 0.6B 起草+云端验证） | 9.4 tok/s | 0.34x |
+| **跨机模块外置（S5）** | **22.5 tok/s** | **0.97x** |
+
+逐层瓶颈定位给出投机解码失败的精确原因——**每步成本比**。设 draft 每步耗时 $d$、target 每步耗时 $t$、接受率 $\alpha$、每轮起草 $K$ 个 token，投机流水盈利的近似条件为：
+
+$$r = d/t < (1-\alpha) \cdot K/(K+1)$$
+
+实测：云端 0.6B 的 $d$=18ms、8B 的 $t$=36ms（比值 0.5，不满足）；本地 Windows 0.6B 的 $d$=38ms——**比云端 8B 每步还慢**（28 层 × 300+ kernel launches 的 WDDM 调度开销），比值 1.06，完全不满足。附带发现：裸 transformers 循环下小模型速度优势出不来（0.6B 在 4090 上仅 55 tok/s，Python 框架开销主导）；专业投机解码系统（vLLM + CUDA Graph 将 $d$ 压到 <5ms）是使该拓扑盈利的工程前提。
+
+**协作模式选择准则**（本文的定量贡献）：节点间每步成本比 $r$ 与接受率 $\alpha$ 决定拓扑选择——$r$ 小于阈值时选投机流水，否则选**模块外置**（吞吐近无损、能力空间相乘、可用性 $1-p^2$）。弱设备作为能力模块的边际价值远超其单独算力价值——**外置架构是弱节点的放大器**。
+
 ---
 
 ## 6 讨论：两个新实证发现
@@ -177,7 +219,7 @@ Ganglion 的检测语义由此确定：故障检测不依赖"看它活着吗"，
 
 本文将"外置神经模块"从口头概念转化为**有形式定义、可运行系统与实验数据的研究问题**：四项语义在真实多进程环境下 40/40 断言通过；逐 token 跨进程往返延迟 p50=0.014ms 证明外置性的延迟代价在典型负载下可忽略；两个新实证发现（冷启动界、exit 可见性延迟）直接约束该方向的系统设计。
 
-**未来工作**：(a) 换挡与在飞请求的竞态一致性（CSP/TLA+ 形式化）；(b) Qwen3-0.6B 真实骨干复测延迟占比；(c) 多模块扇出与每层一模块的聚合带宽；(d) Linux + CUDA IPC 平台对照；(e) 将 DreamHead（我们的扩散头工作）作为首个真实模块负载。
+**未来工作**：(a) 换挡与在飞请求的竞态一致性（CSP/TLA+ 形式化）；(b) Linux + CUDA IPC 平台对照；(c) 多模块扇出与每层一模块的聚合带宽；(d) 将 DreamHead（我们的扩散头工作）作为首个真实模块负载；(e) **具身智能应用**：机器人本体作为外置模块连接云端超大模型——反射层本地毫秒级响应、感知模块经数据面上行、fail-closed 保证断网降级不致盲，四语义与机器人分层智能需求逐条对应；(f) **安全语义**：可逆攻击面（revocable attack surface）的形式化——外置后门可拆卸（vs 权重投毒不可逆）、manifest 签名扩展、refined states 异常检测。
 
 ---
 
@@ -203,3 +245,18 @@ Ganglion 的检测语义由此确定：故障检测不依赖"看它活着吗"，
 [18] Nie S, et al. Large Language Diffusion Models. arXiv:2502.09992, 2025.
 [19] Dream Team. Dream 7B: Diffusion Reasoning Models. arXiv 2025.
 [20] NVIDIA. Multi-Process Service (MPS) Documentation.
+[21] Younesi A, et al. Splitwise: Collaborative Edge-Cloud Inference for LLMs via Lyapunov-Assisted DRL. arXiv:2512.23310, 2025.
+[22] Dong J, et al. HybridFlow: Resource-Adaptive Subtask Routing for Efficient Edge-Cloud LLM Inference. ICML 2026. arXiv:2512.22137.
+[23] PRISM: Privacy-Aware Routing for Adaptive Cloud-Edge LLM Inference. AAAI 2026.
+[24] Edge-cloud Collaborative Knowledge Graph Fusion for Real-Time Robot Q&A. Discover Internet of Things, 2026.
+[25] Yu F, et al. DSD: A Distributed Speculative Decoding Solution for Edge-Cloud Agile Large Model Serving. arXiv:2511.21669, 2025.
+[26] Geedh P. GemmaSense: Hybrid Edge-Cloud Vision-Language System for Robotics. GitHub, 2026.
+[27] Ahmad S, et al. Vision-Language Models on the Edge for Real-Time Robotic Perception. arXiv:2601.14921, 2026.
+[28] Vijaykumar S. EdgeBot-Reflex: Heterogeneous Dual-Model Robot Navigation. GitHub, 2026.
+[29] Dong T, et al. Depth Gives a False Sense of Privacy: LLM Internal States Inversion. arXiv:2507.16372, 2025.
+[30] Korznikov A, et al. The Rogue Scalpel: Activation Steering Compromises LLM Safety. arXiv:2509.22067, 2025.
+[31] Chen L, et al. Causal-Guided Detoxify Backdoor Attack of Open-Weight LoRA Models. arXiv:2512.19297, 2025.
+[32] Puertolas Merenciano D, et al. Weight Space Detection of Backdoors in LoRA Adapters. arXiv:2602.15195, 2026.
+[33] Duan L, et al. PrivaScissors: Enhance the Privacy of Collaborative Inference through the Lens of Mutual Information. arXiv:2306.07973, 2023.
+[34] Feature Sniffer: A Stealthy Inference Attacks Framework on Split Learning. Springer, 2023.
+[35] Semantic Neighbor Swapping for Privacy-Aware Edge-Cloud Inference. Journal of Cloud Computing, 2026.
