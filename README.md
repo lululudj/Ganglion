@@ -21,6 +21,7 @@
 - 逐 token 跨进程往返（768×64 fp16）：**p50 = 0.014ms**
 - **S5 跨机真实大模型**：云端 Qwen3-8B 主力骨干 + 本地 4060 外置模块（SSH 隧道跨公网）——吞吐仅降 **2.7%**，fp32 跨网 **24/24 位级精确**，断连后**零中断降级**
 - **S6 协作模式准则**：投机流水线 0.34–0.71x（每步成本比不满足盈利条件）vs 模块外置 **0.97x** 近无损——弱设备当能力模块的边际价值远超其单独算力（外置架构是弱节点的放大器）
+- **S7 多租户共享云端**（6/6 断言通过）：单骨干 batch=N 服务 8 租户——聚合吞吐 **142.8 tok/s（5.5×）**，每租户仍保有 17.9 tok/s；kill 单租户模块 → victim 恒等降级续生成，**健康租户 0 fallback / 0 mismatch / 24/24 服务**——共享红利与租户级故障隔离同时成立
 - 计划内热换 token 边界零间隙；16 token 全程无混合版本输出
 - 通道吞吐：shm 双槽 16749 MB/s（峰值小负载）> tcp > pipe
 
@@ -31,9 +32,10 @@
 
 ## 人形机器人演示 Demo（中英双语）
 
-`demo/` 目录是一个纯静态 HTML 交互演示——同一张地图、同一个机器人本体，实时可视化四语义在具身场景下的行为：
+`demo/` 目录是纯静态 HTML 交互演示——同一张地图、同一个机器人本体，实时可视化四语义在具身场景下的行为：
 
-- 中文版：[demo/robot_demo_cn.html](demo/robot_demo_cn.html) · English: [demo/robot_demo_en.html](demo/robot_demo_en.html)
+- 单机器人中文版：[demo/robot_demo_cn.html](demo/robot_demo_cn.html) · English: [demo/robot_demo_en.html](demo/robot_demo_en.html)
+- **多机器人共享云端（S7）**：[demo/swarm_demo_cn.html](demo/swarm_demo_cn.html) · English: [demo/swarm_demo_en.html](demo/swarm_demo_en.html)——三台机器人共享单骨干 batch 前向，可视化租户级隔离（kill R2）与相关故障（断网）的传播差异
 
 | 操作 | 可观察的现象 |
 |---|---|
@@ -41,6 +43,8 @@
 | 热换模块 B「激进导航」 | 决策边界原子换挡（白色菱形标记），路线质变为贴边抄近道 |
 | 崩溃注入 / 断网 | fail-closed 恒等降级：**变笨不死**，运动流零中断，恢复后自动重升 |
 | 决策审计轨迹 | 逐步归因：MODULE_OK / FALLBACK / PASSTHROUGH + RTT |
+| （swarm）kill R2 模块 | **租户级隔离**：R2 红轨迹降级，R1/R3 照常服务（S7-C 实测零损伤） |
+| （swarm）断网 | **相关故障**：全部租户同时降级——与单租户死亡的传播差异 |
 
 ## 目录结构
 
@@ -54,10 +58,10 @@ ganglion/
   run_validation.py  # 一键编排 → 控制台 PASS/FAIL 矩阵
   test_ganglion.py   # 13 项单元测试（TDD 先行）
   results.json       # 全部实验数据（40 用例 + 63 项基准行）
-  PAPER_GANGLION_CN.md  # 论文草稿（中文版，v0.2 含跨机验证）
-  PAPER_GANGLION_EN.md  # Paper draft (English, v0.2 with §0 release/priority timestamps)
-  cloud/             # S5/S6 跨机实验：云端 8B 宿主 + 本地模块/起草器 + 全部结果 JSON
-  demo/              # 人形机器人交互演示（中英双语纯静态 HTML + 验证截图）
+  PAPER_GANGLION_CN.md  # 论文草稿（中文版，v0.3 含 S7 多租户共享云端）
+  PAPER_GANGLION_EN.md  # Paper draft (English, v0.3 with §5.5 multi-tenant shared cloud)
+  cloud/             # S5/S6/S7 跨机实验：云端 8B 宿主 + 本地模块/起草器 + 全部结果 JSON
+  demo/              # 机器人交互演示（单机 + swarm 双主题 × 中英双语）
 ```
 
 ## 快速开始

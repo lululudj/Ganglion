@@ -54,7 +54,7 @@ The systems community has produced all the "parts": S-LoRA/dLoRA reuse adapters 
 
 1. **Problem definition** (§3): the first formalization of external neural modules as four verifiable semantics — ABI registration negotiation, fault isolation, hot-swap consistency (token atomicity), transport latency bounds;
 2. **Minimal system** (§4): Ganglion — a three-process architecture (host / module / module′) with a manifest negotiation protocol, dual-slot shared-memory data plane, heartbeat + watchdog control plane, and an identity fallback gate;
-3. **Validation methodology and results** (§5): a 7-scenario (S0–S6) PASS/FAIL matrix and transport benchmarks; cross-machine validation on a real LLM (Qwen3-8B) confirming all four semantics without attenuation (§5.3);
+3. **Validation methodology and results** (§5): a 7-scenario (S0–S6) PASS/FAIL matrix and transport benchmarks; cross-machine validation on a real LLM (Qwen3-8B) confirming all four semantics without attenuation (§5.3); multi-tenant shared-cloud validation confirming the batch dividend and tenant-level isolation hold simultaneously (§5.5);
 4. **Collaboration-mode selection criterion** (§5.4): a quantitative decision rule — the per-step cost ratio $r$ between nodes and acceptance rate $\alpha$ determine the topology choice between module externalization and speculative pipelining;
 5. **Two new empirical findings** (§6): the module cold-start bound (~1.35 s) and the process-termination visibility delay (~125 ms), with their direct design implications for fault-detection semantics.
 
@@ -204,6 +204,26 @@ $$r = d/t < (1-\alpha) \cdot K/(K+1)$$
 Measured: cloud 0.6B $d$=18 ms vs 8B $t$=36 ms (ratio 0.5, condition violated); local Windows 0.6B $d$=38 ms — **slower per step than the cloud 8B itself** (WDDM scheduling overhead of 28 layers × 300+ kernel launches), ratio 1.06, badly violated. Incidental finding: under a bare transformers loop the small model's speed advantage does not materialize (0.6B reaches only 55 tok/s on a 4090 — Python framework overhead dominates); production speculative systems (vLLM + CUDA Graph pushing $d$ below 5 ms) are the engineering precondition for that topology to profit.
 
 **Collaboration-mode selection criterion** (a quantitative contribution of this paper): the inter-node per-step cost ratio $r$ and acceptance rate $\alpha$ determine the topology — below the threshold choose speculative pipelining; otherwise choose **module externalization** (near-lossless throughput, multiplicative capability space, availability $1-p^2$). The marginal value of a weak device as a capability module far exceeds its standalone compute value — **the external architecture is an amplifier for weak nodes**.
+
+### 5.5 S7: Multi-Tenant Shared Cloud — Batch Dividend and Tenant-Level Fault Isolation, Simultaneously
+
+S5/S6 answered "one robot + one cloud"; S7 answers "**N robots sharing one cloud**" — the step that takes the external architecture toward fleets. Setup: a single cloud backbone (Qwen3-8B) serves N tenants with **batch=N forwards**, each tenant holding an independent module connection (independent TCP connection = independent fault domain), with the data plane still round-tripping per token over the SSH reverse tunnel. Three findings:
+
+| Configuration | Aggregate throughput | Per tenant | Tenant RTT p50 |
+|---|---|---|---|
+| A baseline (single tenant, no module) | 24.03 tok/s | — | — |
+| B1 N=1 + module | 26.12 tok/s | 26.12 tok/s | 10.2 ms |
+| **B4 N=4 shared** | **75.20 tok/s (3.1×)** | 18.80 tok/s | 9.9–21.2 ms |
+| **B8 N=8 shared** | **142.77 tok/s (5.5×)** | 17.85 tok/s | 9.9–23.3 ms |
+| C N=4 + kill tenant 2 | 76.34 tok/s | — | victim degraded, healthy tenants unchanged |
+
+**Finding 1: the batch dividend is substantial.** A batch=1 forward pass is memory-bound (weight reads dominate); merging 8 tenants into one forward yields **5.5×** aggregate throughput while each tenant retains 68% of its dedicated speed (17.85 vs 26.12 tok/s) — for decision-driven robots (one planning burst every 640 ms, tens of tokens each) per-tenant throughput still exceeds demand by an order of magnitude. Marginal cost per added tenant falls from 100% (1→2) to ~32% (7→8).
+
+**Finding 2: tenant-level isolation is zero-damage.** Fault injection: tenant 2's module connection was deliberately closed after serving 6 tokens. The victim degraded via the identity gate on that step and **completed all 24 tokens** (fallback point = 6, 18 degraded steps); the three healthy tenants show **served 24/24, 0 fallbacks, 0 mismatches, unchanged RTT distributions**; aggregate throughput during the fault (76.34 tok/s) even matched the fault-free control (75.20) — the victim skipping its module round-trips slightly compensates the fault overhead. **One tenant's death has zero measurable impact on the other tenants sharing the same backbone.**
+
+**Finding 3: sharing introduces correlated-failure semantics.** A single tenant's module death is an independent event (confirmed by S7-C); backbone unreachability degrades all tenants simultaneously (fail-closed guarantees "all dumber at once", not "all dead at once"). This separates the availability model of multi-tenant external systems from single-tenant ones: fault correlation is determined by the backbone, not by module processes — capacity planning (critical tenant count N* at the queueing-delay divergence point) and backbone redundancy become new design variables.
+
+S7 code and full data: `cloud/cloud_host_s7.py`, `cloud/s7_results.json` (6/6 assertions passed).
 
 ---
 

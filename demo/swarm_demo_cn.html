@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ganglion · 多机器人共享云端演示（S7）</title>
+<style>
+  :root{
+    --bg:#05060f; --panel:rgba(16,19,42,.72); --line:rgba(130,140,255,.16);
+    --blue:#6e7bff; --purple:#b369ff; --pink:#ff6ec7; --gold:#ffd76e;
+    --cyan:#6ee7ff; --red:#ff5c5c; --grey:#8a93b0; --green:#3ddc97;
+    --txt:#dfe3ff; --dim:#9aa2c8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--txt);
+    font-family:"Microsoft YaHei","PingFang SC",sans-serif;min-height:100vh;overflow-x:hidden;}
+  #stars{position:fixed;inset:0;z-index:0;}
+  .wrap{position:relative;z-index:1;max-width:1340px;margin:0 auto;padding:16px 18px 28px;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+  h1{font-size:20px;font-weight:700;
+    background:linear-gradient(90deg,#6e7bff,#b369ff,#ff6ec7,#ffd76e);
+    -webkit-background-clip:text;background-clip:text;color:transparent;}
+  .sub{font-size:12px;color:var(--dim);}
+  .badge{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--line);
+    background:rgba(110,123,255,.08);color:var(--blue);}
+
+  /* 云端共享条 */
+  .cloudbar{display:flex;align-items:stretch;gap:12px;margin-bottom:12px;height:118px;}
+  .cloudnode{flex:0 0 300px;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:10px 14px;position:relative;backdrop-filter:blur(6px);}
+  .cloudnode .nt{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .cloudnode .nd{font-size:11px;color:var(--dim);margin-top:3px;line-height:1.5;}
+  .cloudstats{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:10px 16px;display:flex;align-items:center;gap:18px;backdrop-filter:blur(6px);}
+  .cstat{text-align:center;flex:1;}
+  .cstat .v{font-size:19px;font-weight:700;font-family:Consolas,monospace;}
+  .cstat .l{font-size:10px;color:var(--dim);margin-top:2px;}
+  .utilwrap{flex:1.2;}
+  .utilbar{height:10px;border-radius:6px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:6px;}
+  .utilfill{height:100%;width:12%;background:linear-gradient(90deg,var(--blue),var(--purple),var(--pink));
+    transition:width .4s;}
+  .hb{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);
+    animation:hb 1s infinite alternate;}
+  .hb.dead{background:var(--red);box-shadow:0 0 8px var(--red);animation:none;}
+  @keyframes hb{from{opacity:.4}to{opacity:1}}
+
+  .main{display:grid;grid-template-columns:1fr 378px;gap:14px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(6px);}
+  .canvasbox{padding:10px;position:relative;}
+  canvas#arena{width:100%;display:block;border-radius:10px;background:#070818;}
+  .narr{margin-top:10px;padding:10px 14px;border-radius:10px;font-size:12.5px;line-height:1.7;
+    background:rgba(110,123,255,.07);border:1px solid var(--line);color:#c6cdf5;min-height:56px;}
+  .narr b{color:var(--gold);}
+
+  .side{display:flex;flex-direction:column;gap:12px;}
+  .sec{padding:12px 14px;}
+  .sec h3{font-size:12.5px;color:var(--dim);font-weight:600;letter-spacing:.5px;margin-bottom:9px;
+    display:flex;justify-content:space-between;align-items:center;}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  button{cursor:pointer;border:1px solid var(--line);background:rgba(110,123,255,.10);
+    color:var(--txt);font-size:12px;padding:8px 6px;border-radius:9px;transition:.18s;
+    font-family:inherit;text-align:center;line-height:1.35;}
+  button:hover:not(:disabled){background:rgba(110,123,255,.24);transform:translateY(-1px);}
+  button:disabled{opacity:.32;cursor:not-allowed;}
+  button.deploy{border-color:rgba(61,220,151,.5);background:rgba(61,220,151,.10);}
+  button.deploy:hover:not(:disabled){background:rgba(61,220,151,.24);}
+  button.killr2{border-color:rgba(255,92,92,.5);background:rgba(255,92,92,.10);}
+  button.killr2:hover:not(:disabled){background:rgba(255,92,92,.28);}
+  button.netcut{border-color:rgba(255,110,199,.5);background:rgba(255,110,199,.10);}
+  .rlist{display:flex;flex-direction:column;gap:6px;margin-top:9px;}
+  .rrow{display:flex;align-items:center;gap:8px;font-size:11.5px;padding:5px 9px;
+    background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px;}
+  .rdot{width:9px;height:9px;border-radius:50%;}
+  .rrow .rsrc{margin-left:auto;font-size:10.5px;}
+  .rrow .rrtt{font-family:Consolas,monospace;color:var(--dim);font-size:10.5px;width:58px;text-align:right;}
+
+  .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+  .stat{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;
+    padding:8px 6px;text-align:center;}
+  .stat .v{font-size:17px;font-weight:700;font-family:Consolas,monospace;}
+  .stat .l{font-size:10px;color:var(--dim);margin-top:2px;}
+
+  .audit{max-height:190px;overflow-y:auto;font-size:11px;font-family:Consolas,monospace;}
+  .audit div{padding:3px 6px;border-left:2px solid var(--line);margin-bottom:3px;color:var(--dim);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .audit .okA{border-color:var(--purple);color:#cbb2ff;}
+  .audit .okB{border-color:var(--gold);color:#ffe4a8;}
+  .audit .okC{border-color:var(--cyan);color:#b8f2ff;}
+  .audit .fb{border-color:var(--red);color:#ffb3b3;}
+  .audit .pt{border-color:var(--grey);}
+  .events{max-height:118px;overflow-y:auto;font-size:11px;}
+  .events div{padding:2.5px 6px;color:var(--dim);border-bottom:1px dashed rgba(130,140,255,.08);}
+  .events b{color:var(--blue);font-weight:600;}
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-thumb{background:rgba(130,140,255,.25);border-radius:3px;}
+  @media(max-width:1040px){.main{grid-template-columns:1fr;}.cloudbar{height:auto;flex-wrap:wrap;}}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Ganglion · 多机器人共享云端演示（S7）</h1>
+      <div class="sub">单骨干 Qwen3-8B（batch=N 前向）&nbsp;·&nbsp;每机器人独立模块连接 = 独立故障域&nbsp;·&nbsp;共享红利 + 故障隔离同时成立</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a class="badge" href="swarm_demo_en.html" style="text-decoration:none" title="English version">🌐 English</a>
+      <div class="badge">S7 实测：N=8 聚合 142.8 tok/s（5.5×）· 隔离零损伤</div>
+    </div>
+  </header>
+
+  <div class="cloudbar">
+    <div class="cloudnode">
+      <div class="nt">☁️ 云端共享骨干 <span class="hb" id="cloudHb"></span></div>
+      <div class="nd">单进程 Qwen3-8B · blk.16 插桩<br>batch=<span id="batchN">1</span> 前向 · 权重读取摊薄<br><span id="cloudMode" style="color:var(--dim)">等待租户接入…</span></div>
+    </div>
+    <div class="cloudstats">
+      <div class="cstat"><div class="v" id="stTenants" style="color:var(--blue)">0</div><div class="l">服务租户数</div></div>
+      <div class="cstat"><div class="v" id="stAgg" style="color:var(--green)">0.0</div><div class="l">聚合 tok/s</div></div>
+      <div class="cstat"><div class="v" id="stIsol" style="color:var(--purple)">—</div><div class="l">隔离事件</div></div>
+      <div class="utilwrap">
+        <div style="font-size:10px;color:var(--dim)">骨干利用率 <span id="utilVal" style="color:var(--txt)">12%</span></div>
+        <div class="utilbar"><div class="utilfill" id="utilFill"></div></div>
+        <div style="font-size:10px;color:var(--dim);margin-top:4px">提示：租户越多权重摊薄越充分</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="card canvasbox">
+      <canvas id="arena" width="900" height="540"></canvas>
+      <div class="narr" id="narr">点击右侧【全员部署模块】开始——三台机器人共享同一个云端大脑。然后试试 <b>kill R2 的模块</b>：R2 变笨，R1/R3 毫发无伤——这就是租户级故障隔离。再试试【断网】：全部同时降级——共享骨干的相关故障语义。</div>
+    </div>
+
+    <div class="side">
+      <div class="card sec">
+        <h3>群体操作（S7 语义）<span style="font-size:10px">batch 前向 · 独立故障域</span></h3>
+        <div class="btns">
+          <button class="deploy" id="btnAll">全员部署模块<br>（接入共享骨干）</button>
+          <button class="killr2" id="btnKill2">💥 kill R2 模块<br>（只杀租户2）</button>
+          <button class="netcut" id="btnNet">断网 / 恢复<br>（共享骨干失联）</button>
+          <button id="btnReset">重置实验<br>（清轨迹与新地图）</button>
+        </div>
+        <div class="rlist">
+          <div class="rrow"><span class="rdot" style="background:var(--purple)"></span>R1·谨慎<span class="rrtt" id="rttR1">— ms</span><span class="rsrc" id="srcR1">反射基线</span></div>
+          <div class="rrow"><span class="rdot" style="background:var(--gold)"></span>R2·激进<span class="rrtt" id="rttR2">— ms</span><span class="rsrc" id="srcR2">反射基线</span></div>
+          <div class="rrow"><span class="rdot" style="background:var(--cyan)"></span>R3·谨慎<span class="rrtt" id="rttR3">— ms</span><span class="rsrc" id="srcR3">反射基线</span></div>
+        </div>
+      </div>
+
+      <div class="card sec">
+        <h3>运行统计 <span style="font-size:10px" id="mode">当前：全员反射基线</span></h3>
+        <div class="statgrid">
+          <div class="stat"><div class="v" id="stSteps">0</div><div class="l">batch 决策步</div></div>
+          <div class="stat"><div class="v" id="stFall" style="color:var(--red)">0</div><div class="l">降级步（合计）</div></div>
+          <div class="stat"><div class="v" id="stTargets" style="color:var(--green)">0</div><div class="l">到达目标（合计）</div></div>
+        </div>
+      </div>
+
+      <div class="card sec">
+        <h3>决策审计（逐租户归因）</h3>
+        <div class="audit" id="audit"></div>
+      </div>
+
+      <div class="card sec">
+        <h3>系统事件</h3>
+        <div class="events" id="events"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ 星空背景 ============ */
+(function(){
+  const cv=document.getElementById('stars'),ctx=cv.getContext('2d');
+  let stars=[];
+  function rs(){cv.width=innerWidth;cv.height=innerHeight;
+    stars=Array.from({length:130},()=>({x:Math.random()*cv.width,y:Math.random()*cv.height,
+      r:Math.random()*1.3+.2,a:Math.random()*.6+.15,tw:Math.random()*Math.PI*2}));}
+  rs();addEventListener('resize',rs);
+  (function draw(t){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    const g=ctx.createRadialGradient(cv.width*.7,cv.height*.15,0,cv.width*.7,cv.height*.15,cv.width*.7);
+    g.addColorStop(0,'rgba(90,60,180,.10)');g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,cv.width,cv.height);
+    for(const s of stars){const a=s.a*(0.6+0.4*Math.sin(t/900+s.tw));
+      ctx.globalAlpha=a;ctx.fillStyle='#aebbff';ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,7);ctx.fill();}
+    ctx.globalAlpha=1;requestAnimationFrame(draw);
+  })(0);
+})();
+
+/* ============ 状态 ============ */
+const COLS=30, ROWS=18, CELL=30;
+const S={
+  network:true,
+  robots:[],           // 3 台
+  waypointsByRobot:{},
+  audit:[], events:[],
+  steps:0, targets:0,
+  isolEvents:0,
+  deployed:false,
+  handshake:null,      // {t,dur}
+};
+const POLICY={
+  A:{name:'谨慎',margin:2,marginCost:7,dangerR:3.4,dangerCost:42,diag:false},
+  B:{name:'激进',margin:0,marginCost:0,dangerR:1.2,dangerCost:3,diag:true},
+};
+const RCOLOR={R1:'#b369ff',R2:'#ffd76e',R3:'#6ee7ff'};
+const ROBOT_DEF=[
+  {id:'R1',policy:'A',start:{c:1.5,r:9}},
+  {id:'R2',policy:'B',start:{c:2,r:3}},
+  {id:'R3',policy:'A',start:{c:2,r:15}},
+];
+let obstacles=[],dangers=[];
+
+/* ============ 地图 ============ */
+function genMap(){
+  obstacles=[{c:6,r:3,w:3,h:6},{c:6,r:11,w:3,h:5},{c:14,r:5,w:4,h:3},
+             {c:14,r:11,w:4,h:3},{c:21,r:2,w:3,h:5},{c:21,r:10,w:3,h:6},
+             {c:11,r:8,w:2,h:2}];
+  dangers=[{cx:10.5,cy:4.5,r:2.6},{cx:19,cy:13,r:2.9},{cx:24.5,cy:6.5,r:2.2},
+           {cx:3.5,cy:14,r:1.9}];
+}
+function blocked(c,r){
+  for(const o of obstacles)if(c>=o.c&&c<o.c+o.w&&r>=o.r&&r<o.r+o.h)return true;
+  return c<0||r<0||c>=COLS||r>=ROWS;
+}
+function nearObstacle(c,r,m){
+  for(let d=1;d<=m;d++)
+    for(const[dc,dr]of[[d,0],[-d,0],[0,d],[0,-d],[d,d],[d,-d],[-d,d],[-d,-d]])
+      if(blocked(c+dc,r+dr))return true;
+  return false;
+}
+function inDanger(c,r,pad){
+  for(const d of dangers){if(Math.hypot(c-d.cx,r-d.cy)<d.r+pad)return true;}
+  return false;
+}
+function newTarget(rb){
+  for(let i=0;i<80;i++){
+    const c=2+Math.floor(Math.random()*(COLS-4)),r=1+Math.floor(Math.random()*(ROWS-2));
+    if(!blocked(c,r)&&!inDanger(c,r,0.5)){rb.target={c,r};return;}
+  }
+  rb.target={c:COLS-2,r:1};
+}
+
+/* ============ A* 规划 ============ */
+function plan(rb){
+  const policy=POLICY[rb.policy];
+  const start={c:Math.floor(rb.x/CELL),r:Math.floor(rb.y/CELL)};
+  const goal={c:rb.target.c,r:rb.target.r};
+  if(blocked(start.c,start.r))return[];
+  const cost=(c,r)=>{
+    if(blocked(c,r))return Infinity;
+    let g=1;
+    if(policy.margin>0&&nearObstacle(c,r,policy.margin))g+=policy.marginCost;
+    for(const d of dangers){
+      const dist=Math.hypot(c-d.cx,r-d.cy),R=d.r+policy.dangerR;
+      if(dist<R)g+=policy.dangerCost*(1-dist/R);
+    }
+    return g;
+  };
+  const open=[{c:start.c,r:start.r,g:0,f:0,p:null}],seen=new Map();
+  const key=(c,r)=>c+','+r;seen.set(key(start.c,start.r),0);
+  while(open.length){
+    open.sort((a,b)=>a.f-b.f);
+    const cur=open.shift();
+    if(cur.c===goal.c&&cur.r===goal.r){
+      const path=[];let n=cur;
+      while(n){path.unshift({c:n.c,r:n.r});n=n.p;}
+      return path;
+    }
+    const dirs=policy.diag?[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]
+                           :[[1,0],[-1,0],[0,1],[0,-1]];
+    for(const[dc,dr]of dirs){
+      const nc=cur.c+dc,nr=cur.r+dr;
+      if(blocked(nc,nr))continue;
+      const step=(dc&&dr?1.414:1)*cost(nc,nr);
+      if(!isFinite(step))continue;
+      const ng=cur.g+step;
+      const k=key(nc,nr);
+      if(seen.has(k)&&seen.get(k)<=ng)continue;
+      seen.set(k,ng);
+      open.push({c:nc,r:nr,g:ng,f:ng+Math.hypot(goal.c-nc,goal.r-nr),p:cur});
+    }
+  }
+  return[];
+}
+
+/* ============ 反射层 ============ */
+function reflexSteer(rb){
+  const tx=(rb.target.c+.5)*CELL,ty=(rb.target.r+.5)*CELL;
+  let ang=Math.atan2(ty-rb.y,tx-rb.x);
+  const look=CELL*1.6;
+  const probe=(a)=>{const px=rb.x+Math.cos(a)*look,py=rb.y+Math.sin(a)*look;
+    return blocked(Math.floor(px/CELL),Math.floor(py/CELL))||inDanger(px/CELL-0.5,py/CELL-0.5,-0.3);};
+  if(probe(ang)){
+    for(let t=30;t<=180;t+=25){
+      if(!probe(ang+t*Math.PI/180)){ang+=t*Math.PI/180;break;}
+      if(!probe(ang-t*Math.PI/180)){ang-=t*Math.PI/180;break;}
+    }
+  }
+  rb.ang+=(function(a,b){let d=a-b;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;})(ang,rb.ang)*.25;
+  return{vx:Math.cos(rb.ang),vy:Math.sin(rb.ang)};
+}
+
+/* ============ 事件与审计 ============ */
+function logEvent(txt){
+  const t=new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  S.events.unshift({t,txt});
+  if(S.events.length>40)S.events.pop();
+  renderEvents();
+}
+function pushAudit(){
+  const lines=[];
+  for(const rb of S.robots){
+    let line,cls;
+    if(rb.serving==='MOD'){line=`#${String(S.steps).padStart(4,'0')} ${rb.id} ✓MODULE_OK ${rb.rtt}ms`;cls='ok'+rb.id[1];}
+    else if(rb.serving==='FB'){line=`#${String(S.steps).padStart(4,'0')} ${rb.id} ✗FALLBACK 恒等降级`;cls='fb';}
+    else{line=`#${String(S.steps).padStart(4,'0')} ${rb.id} — PASSTHROUGH`;cls='pt';}
+    S.audit.unshift({line,cls});
+  }
+  if(S.audit.length>40)S.audit.splice(40);
+  renderAudit();
+}
+
+/* ============ 决策步：batch 语义（所有租户一次前向同时推进）============ */
+function decisionStep(){
+  S.steps++;
+  if(S.handshake)return;
+  const tenants=S.robots.filter(r=>r.moduleAlive).length;
+  for(const rb of S.robots){
+    let src;
+    if(!rb.module){src='PT';}
+    else if(!S.network||!rb.alive){src='FB';}
+    else{src='MOD';}
+    const prev=rb.serving;
+    rb.serving=src;
+    if(src==='MOD'){
+      rb.rtt=(9.8+Math.random()*8).toFixed(1);
+      S.waypointsByRobot[rb.id]=plan(rb);
+      if(prev!=='MOD')logEvent(`✓ ${rb.id} MODULE_OK（batch 前向共享）`);
+    }else{
+      S.waypointsByRobot[rb.id]=[];
+      if(src==='FB'&&prev!=='FB'){
+        logEvent(S.network
+          ?`⚠ ${rb.id} 模块进程死亡 → 恒等降级（隔离：其他租户不受影响）`
+          :`⚠ 网络断开 → ${rb.id} 恒等降级（fail-closed）`);
+        if(S.network)S.isolEvents++;
+      }
+    }
+    rb.stats[src==='MOD'?'mod':src==='FB'?'fb':'pt']++;
+  }
+  pushAudit();
+  renderStats();
+}
+
+/* ============ 移动 ============ */
+function move(dt){
+  for(const rb of S.robots){
+    let vx,vy;
+    const wp_path=S.waypointsByRobot[rb.id];
+    if(rb.serving==='MOD'&&wp_path&&wp_path.length>1){
+      const wp=wp_path[1];
+      const tx=(wp.c+.5)*CELL,ty=(wp.r+.5)*CELL;
+      const dx=tx-rb.x,dy=ty-rb.y,d=Math.hypot(dx,dy);
+      if(d<8){wp_path.shift();}
+      else{vx=dx/d;vy=dy/d;rb.ang=Math.atan2(vy,vx);}
+    }
+    if(vx===undefined){
+      const s=reflexSteer(rb);vx=s.vx;vy=s.vy;
+      const nx=rb.x+vx*2,ny=rb.y+vy*2;
+      if(blocked(Math.floor(nx/CELL),Math.floor(ny/CELL)))rb.stuck=(rb.stuck||0)+1;
+      if(rb.stuck>26){rb.ang+=Math.PI*(0.5+Math.random());rb.stuck=0;}
+    }else rb.stuck=0;
+    rb.x+=vx*1.75;rb.y+=vy*1.75;
+    rb.x=Math.max(12,Math.min(COLS*CELL-12,rb.x));
+    rb.y=Math.max(12,Math.min(ROWS*CELL-12,rb.y));
+    const src=rb.serving==='MOD'?(S.network&&rb.alive?'MOD':'FB'):(rb.module?'FB':'PT');
+    rb.trail.push({x:rb.x,y:rb.y,src});
+    if(rb.trail.length>2200)rb.trail.shift();
+    const tdx=(rb.target.c+.5)*CELL-rb.x,tdy=(rb.target.r+.5)*CELL-rb.y;
+    if(Math.hypot(tdx,tdy)<15){
+      S.targets++;newTarget(rb);
+      if(rb.serving==='MOD')S.waypointsByRobot[rb.id]=plan(rb);
+    }
+  }
+}
+
+/* ============ 渲染主画布 ============ */
+const arena=document.getElementById('arena'),actx=arena.getContext('2d');
+function drawArena(t){
+  const W=COLS*CELL,H=ROWS*CELL;
+  actx.clearRect(0,0,W,H);
+  actx.strokeStyle='rgba(120,130,255,.055)';actx.lineWidth=1;
+  for(let c=0;c<=COLS;c++){actx.beginPath();actx.moveTo(c*CELL,0);actx.lineTo(c*CELL,H);actx.stroke();}
+  for(let r=0;r<=ROWS;r++){actx.beginPath();actx.moveTo(0,r*CELL);actx.lineTo(W,r*CELL);actx.stroke();}
+  for(const d of dangers){
+    const px=(d.cx+.5)*CELL,py=(d.cy+.5)*CELL,pr=d.r*CELL;
+    const pulse=.14+.08*Math.sin(t/500+d.cx);
+    const g=actx.createRadialGradient(px,py,pr*.2,px,py,pr);
+    g.addColorStop(0,`rgba(255,70,70,${pulse+.16})`);g.addColorStop(1,'rgba(255,70,70,0)');
+    actx.fillStyle=g;actx.beginPath();actx.arc(px,py,pr,0,7);actx.fill();
+    actx.strokeStyle=`rgba(255,92,92,${.28+.12*Math.sin(t/500)})`;
+    actx.setLineDash([5,5]);actx.beginPath();actx.arc(px,py,pr,0,7);actx.stroke();actx.setLineDash([]);
+    actx.fillStyle='rgba(255,120,120,.5)';actx.font='10px sans-serif';
+    actx.fillText('危险区',px-14,py+3);
+  }
+  for(const o of obstacles){
+    const g=actx.createLinearGradient(o.c*CELL,o.r*CELL,(o.c+o.w)*CELL,(o.r+o.h)*CELL);
+    g.addColorStop(0,'rgba(90,100,190,.4)');g.addColorStop(1,'rgba(60,70,150,.25)');
+    actx.fillStyle=g;
+    roundRect(o.c*CELL+2,o.r*CELL+2,o.w*CELL-4,o.h*CELL-4,6);actx.fill();
+    actx.strokeStyle='rgba(140,150,255,.35)';actx.lineWidth=1;actx.stroke();
+  }
+  // 机器人（含目标/轨迹/标签）
+  for(const rb of S.robots){
+    const tx=(rb.target.c+.5)*CELL,ty=(rb.target.r+.5)*CELL;
+    const rr=7+2*Math.sin(t/300+rb.id.charCodeAt(1));
+    actx.strokeStyle=RCOLOR[rb.id];actx.lineWidth=1.6;actx.globalAlpha=.6;
+    actx.beginPath();actx.arc(tx,ty,rr,0,7);actx.stroke();
+    actx.globalAlpha=1;
+    // 轨迹
+    actx.lineWidth=2.2;actx.lineCap='round';
+    for(let i=1;i<rb.trail.length;i++){
+      const a=rb.trail[i-1],b=rb.trail[i];
+      if(Math.hypot(a.x-b.x,a.y-b.y)>CELL*2.5)continue;
+      actx.strokeStyle=b.src==='MOD'?RCOLOR[rb.id]:b.src==='FB'?'#ff5c5c':'#8a93b0';
+      actx.globalAlpha=.7;
+      actx.beginPath();actx.moveTo(a.x,a.y);actx.lineTo(b.x,b.y);actx.stroke();
+    }
+    actx.globalAlpha=1;
+    // 规划预览
+    const wp=S.waypointsByRobot[rb.id];
+    if(rb.serving==='MOD'&&wp&&wp.length>1){
+      actx.strokeStyle=RCOLOR[rb.id];actx.globalAlpha=.18;actx.lineWidth=1.2;
+      actx.setLineDash([4,6]);actx.beginPath();
+      actx.moveTo(rb.x,rb.y);
+      for(let i=1;i<wp.length;i++)actx.lineTo((wp[i].c+.5)*CELL,(wp[i].r+.5)*CELL);
+      actx.stroke();actx.setLineDash([]);actx.globalAlpha=1;
+    }
+    // 机器人本体
+    const gc=rb.serving==='MOD'?RCOLOR[rb.id]:rb.serving==='FB'?'#ff5c5c':'#8a93b0';
+    const glow=actx.createRadialGradient(rb.x,rb.y,2,rb.x,rb.y,18);
+    glow.addColorStop(0,hexA(gc,.45));glow.addColorStop(1,hexA(gc,0));
+    actx.fillStyle=glow;actx.beginPath();actx.arc(rb.x,rb.y,18,0,7);actx.fill();
+    actx.save();actx.translate(rb.x,rb.y);actx.rotate(rb.ang);
+    actx.fillStyle='#e8ecff';
+    actx.beginPath();actx.arc(0,-6,3.6,0,7);actx.fill();
+    actx.beginPath();actx.ellipse(0,2,5,6.5,0,0,7);actx.fill();
+    actx.strokeStyle='#cfd6ff';actx.lineWidth=2;
+    actx.beginPath();actx.moveTo(-4,-1);actx.lineTo(-5,-8);actx.stroke();
+    actx.beginPath();actx.moveTo(4,-1);actx.lineTo(5,-8);actx.stroke();
+    actx.beginPath();actx.moveTo(-2,7);actx.lineTo(-2.5,13);actx.stroke();
+    actx.beginPath();actx.moveTo(2,7);actx.lineTo(2.5,13);actx.stroke();
+    actx.restore();
+    // 标签
+    actx.fillStyle=gc;actx.font='bold 11px sans-serif';
+    actx.fillText(rb.id,rb.x-8,rb.y-22);
+  }
+}
+function hexA(hex,a){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function roundRect(x,y,w,h,r){
+  actx.beginPath();actx.moveTo(x+r,y);actx.arcTo(x+w,y,x+w,y+h,r);
+  actx.arcTo(x+w,y+h,x,y+h,r);actx.arcTo(x,y+h,x,y,r);actx.arcTo(x,y,x+w,y,r);actx.closePath();
+}
+
+/* ============ UI 渲染 ============ */
+const $=id=>document.getElementById(id);
+function renderStats(){
+  const modN=S.robots.filter(r=>r.serving==='MOD').length;
+  $('stTenants').textContent=modN;
+  $('batchN').textContent=Math.max(1,modN);
+  // 聚合吞吐：S7 实测（N=1:26.1 / N=4:75.2 / N=8:142.8 tok/s 线性内插）
+  const agg=modN===0?0:(26.1+(modN-1)*16.4);
+  $('stAgg').textContent=agg.toFixed(1);
+  const util=modN===0?12:Math.min(88,12+modN*19);
+  $('utilFill').style.width=util+'%';$('utilVal').textContent=util+'%';
+  $('stSteps').textContent=S.steps;
+  $('stFall').textContent=S.robots.reduce((a,r)=>a+r.stats.fb,0);
+  $('stTargets').textContent=S.targets;
+  $('stIsol').textContent=S.isolEvents>0?S.isolEvents+'起':'—';
+  // 每机器人状态行
+  for(const rb of S.robots){
+    const src=$('src'+rb.id);
+    if(rb.serving==='MOD'){src.textContent='模块服务中';src.style.color=RCOLOR[rb.id];}
+    else if(rb.serving==='FB'){src.textContent='降级(恒等门)';src.style.color='var(--red)';}
+    else{src.textContent='反射基线';src.style.color='var(--dim)';}
+    $('rtt'+rb.id).textContent=rb.serving==='MOD'?rb.rtt+' ms':'— ms';
+  }
+  // 云端模式
+  let mode,color;
+  if(S.handshake){mode='租户接入握手中…';color='var(--gold)';}
+  else if(modN===3){mode='3 租户共享 batch=3';color='var(--green)';}
+  else if(modN>0){mode=`${modN} 租户共享 batch=${modN}`;color='var(--blue)';}
+  else if(S.deployed){mode='全部降级（相关故障）';color='var(--red)';}
+  else{mode='等待租户接入…';color='var(--dim)';}
+  const cm=$('cloudMode');cm.textContent=mode;cm.style.color=color;
+  const m=$('mode');
+  if(S.handshake){m.textContent='当前：冷启动握手';m.style.color='var(--gold)';}
+  else if(modN===0&&S.deployed){m.textContent='当前：全员降级';m.style.color='var(--red)';}
+  else if(modN===0){m.textContent='当前：全员反射基线';m.style.color='var(--grey)';}
+  else{m.textContent=`当前：${modN}/3 租户在线`;m.style.color='var(--green)';}
+  $('cloudHb').className=modN>0?'hb':'hb dead';
+}
+function renderAudit(){
+  $('audit').innerHTML=S.audit.map(a=>`<div class="${a.cls}">${a.line}</div>`).join('');
+}
+function renderEvents(){
+  $('events').innerHTML=S.events.map(e=>`<div><b>${e.t}</b> ${e.txt}</div>`).join('');
+}
+function renderNarr(){
+  const n=$('narr');
+  const modN=S.robots.filter(r=>r.serving==='MOD').length;
+  const r2=S.robots[1];
+  if(S.handshake){n.innerHTML=`全员冷启动握手中——<b>spawn→READY ≈1.35s/租户</b>。注意：每个租户一个独立模块进程（独立故障域），但共享同一个骨干前向。`;return;}
+  if(!S.deployed){n.innerHTML=`<b>纯本地反射基线×3</b>：三台机器人各自靠毫秒级反射贪心走——会犹豫、贴边、卡住。点【全员部署模块】看共享云端接入后的<b>路线质变</b>。`;return;}
+  if(modN===0){
+    n.innerHTML=S.network
+      ?`<b>所有租户的模块都死了。</b>但注意——<b>骨干本身还活着</b>：恒等门让三台机器人全部降级到反射层，没有一台死机。<b>kill 是租户级的，不是机器级的</b>。`
+      :`<b>网络断了：全部同时降级。</b>这是共享骨干的<b>相关故障</b>——单租户的模块死亡互不影响（独立连接），但骨干失联对所有租户同时生效。对比【kill R2】看两种故障的传播差异。`;
+    return;
+  }
+  if(r2.serving==='FB'&&S.network){
+    n.innerHTML=`<b>租户级隔离现场：</b>R2 的模块被 kill（红轨迹），R1/R3 照常服务（紫/青轨迹）——<b>同一骨干上，一个租户的死亡对其他租户零影响</b>（S7-C 实测：健康租户 served 24/24、0 fallback、0 mismatch，隔离期间聚合吞吐 76.3 tok/s 甚至不低于无故障的 75.2）。`;
+    return;
+  }
+  n.innerHTML=`<b>${modN} 台机器人共享一个云端大脑。</b>每次决策是<b>一次 batch 前向</b>：三份 token 一起过骨干（权重只读一次）——S7 实测 N=4 聚合 75.2 tok/s（3.1×）、N=8 聚合 142.8 tok/s（5.5×），每租户仍保有 17.9 tok/s。每台机器人仍有自己的模块连接（独立 RTT、独立故障域）。试试 <b>kill R2</b> 或 <b>断网</b>。`;
+}
+
+/* ============ 按钮 ============ */
+$('btnAll').onclick=()=>{
+  if(S.handshake)return;
+  S.deployed=true;
+  S.handshake={t:0,dur:1350};
+  logEvent('⇪ 全员部署：ABI 协商 ✓（layer=blk.16·dim=4096·fp32×3 连接）');
+  $('btnAll').disabled=true;
+};
+$('btnKill2').onclick=()=>{
+  const r2=S.robots[1];
+  if(!r2.module||!r2.alive||S.handshake)return;
+  r2.alive=false;
+  logEvent(`💥 kill -9 租户 R2 的模块进程（其余 2 个租户不受影响）`);
+};
+$('btnNet').onclick=()=>{
+  S.network=!S.network;
+  logEvent(S.network?'🌐 网络已恢复（共享隧道重连）':'✂ 网络已断开 → 全部租户同时降级（相关故障）');
+};
+$('btnReset').onclick=()=>{
+  initRobots();
+  S.audit=[];S.steps=0;S.targets=0;S.isolEvents=0;
+  S.deployed=false;S.handshake=null;S.network=true;
+  $('btnAll').disabled=false;
+  logEvent('🔄 实验已重置（新地图）');
+  renderStats();renderAudit();
+};
+function initRobots(){
+  genMap();
+  S.robots=ROBOT_DEF.map(def=>({
+    id:def.id,policy:def.policy,
+    x:def.start.c*CELL,y:def.start.r*CELL,ang:0,
+    target:null,trail:[],stuck:0,
+    module:false,alive:false,
+    serving:'PT',rtt:null,
+    stats:{mod:0,fb:0,pt:0},
+  }));
+  S.waypointsByRobot={};
+  for(const rb of S.robots)newTarget(rb);
+}
+
+/* ============ 主循环 ============ */
+let last=performance.now(),decisionTimer=0;
+function loop(t){
+  const dt=Math.min(50,t-last);last=t;
+  if(S.handshake){
+    S.handshake.t+=dt;
+    if(S.handshake.t>=S.handshake.dur){
+      for(const rb of S.robots){rb.module=true;rb.alive=true;}
+      S.handshake=null;
+      logEvent('✓ READY ×3：三租户接入共享骨干（batch=3 前向开始）');
+      decisionStep();
+    }
+  }
+  decisionTimer+=dt;
+  if(decisionTimer>=700){decisionTimer=0;decisionStep();}
+  move(dt);
+  drawArena(t);
+  renderStats();
+  if(Math.floor(t/600)!==Math.floor((t-dt)/600))renderNarr();
+  requestAnimationFrame(loop);
+}
+
+/* ============ 启动 ============ */
+initRobots();
+logEvent('🚀 S7 演示启动：共享骨干就绪，等待租户接入');
+logEvent('提示：全员部署 → kill R2（看隔离）→ 断网（看相关故障）');
+renderStats();renderAudit();renderEvents();renderNarr();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

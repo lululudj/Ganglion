@@ -1,0 +1,344 @@
+{
+  "model": "/root/autodl-tmp/Qwen3-8B",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "tap_layer": 16,
+  "n_tokens": 24,
+  "prompt": "The theory of external neural modules states that",
+  "transform": "h*5.0+2.0",
+  "A_baseline": {
+    "n_tenants": 1,
+    "aggregate_tok_per_s": 24.03,
+    "per_tenant_tok_per_s": 24.03,
+    "batch_step_ms": {
+      "n": 24,
+      "p50": 23.573,
+      "min": 23.31,
+      "max": 436.623,
+      "mean": 41.597
+    },
+    "text": " the brain is not a single, unified system but rather a collection of specialize"
+  },
+  "B_stages": [
+    {
+      "n_tenants": 1,
+      "aggregate_tok_per_s": 26.12,
+      "per_tenant_tok_per_s": 26.12,
+      "batch_step_ms": {
+        "n": 24,
+        "p50": 35.669,
+        "min": 34.494,
+        "max": 55.847,
+        "mean": 38.259
+      },
+      "total_wall_s": 0.919,
+      "tenants": [
+        {
+          "tid": 1,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 10.214,
+            "min": 9.685,
+            "max": 25.467,
+            "mean": 12.548
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        }
+      ],
+      "scaling_efficiency": 1.0871
+    },
+    {
+      "n_tenants": 4,
+      "aggregate_tok_per_s": 75.2,
+      "per_tenant_tok_per_s": 18.8,
+      "batch_step_ms": {
+        "n": 24,
+        "p50": 53.463,
+        "min": 46.69,
+        "max": 63.717,
+        "mean": 53.168
+      },
+      "total_wall_s": 1.277,
+      "tenants": [
+        {
+          "tid": 1,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 9.866,
+            "min": 9.541,
+            "max": 15.93,
+            "mean": 10.122
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 2,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 18.267,
+            "min": 10.803,
+            "max": 19.275,
+            "mean": 16.905
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 3,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 19.753,
+            "min": 12.427,
+            "max": 22.089,
+            "mean": 18.54
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 4,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 21.174,
+            "min": 13.879,
+            "max": 23.968,
+            "mean": 20.164
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        }
+      ],
+      "scaling_efficiency": 0.7824
+    },
+    {
+      "n_tenants": 8,
+      "aggregate_tok_per_s": 142.77,
+      "per_tenant_tok_per_s": 17.85,
+      "batch_step_ms": {
+        "n": 24,
+        "p50": 56.541,
+        "min": 49.918,
+        "max": 65.047,
+        "mean": 56.007
+      },
+      "total_wall_s": 1.345,
+      "tenants": [
+        {
+          "tid": 1,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 9.858,
+            "min": 9.617,
+            "max": 10.444,
+            "mean": 9.905
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 2,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 11.287,
+            "min": 10.864,
+            "max": 15.526,
+            "mean": 11.706
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 3,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 12.666,
+            "min": 11.183,
+            "max": 16.946,
+            "mean": 12.923
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 4,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 13.997,
+            "min": 12.645,
+            "max": 18.997,
+            "mean": 14.444
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 5,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 19.686,
+            "min": 13.849,
+            "max": 21.332,
+            "mean": 19.558
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 6,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 20.955,
+            "min": 19.136,
+            "max": 25.624,
+            "mean": 21.22
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 7,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 22.29,
+            "min": 20.594,
+            "max": 24.397,
+            "mean": 22.607
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        },
+        {
+          "tid": 8,
+          "served": 24,
+          "mismatch": 0,
+          "rtt_ms": {
+            "n": 24,
+            "p50": 23.262,
+            "min": 20.678,
+            "max": 27.699,
+            "mean": 23.983
+          },
+          "fallback_at": null,
+          "total_fallbacks": 0,
+          "text": " the brain is divided into different modules, which are resp"
+        }
+      ],
+      "scaling_efficiency": 0.7427
+    }
+  ],
+  "C_isolation": {
+    "n_tenants": 4,
+    "fault_tenant": 2,
+    "fault_after": 6,
+    "armed_ok": true,
+    "completed_tokens_all": 24,
+    "aggregate_tok_per_s": 76.34,
+    "tenants": [
+      {
+        "tid": 1,
+        "served": 24,
+        "mismatch": 0,
+        "rtt_ms": {
+          "n": 24,
+          "p50": 9.812,
+          "min": 9.612,
+          "max": 22.315,
+          "mean": 11.169
+        },
+        "fallback_at": null,
+        "total_fallbacks": 0,
+        "survived": true
+      },
+      {
+        "tid": 2,
+        "served": 6,
+        "mismatch": 0,
+        "rtt_ms": {
+          "n": 6,
+          "p50": 18.311,
+          "min": 18.254,
+          "max": 18.536,
+          "mean": 18.337
+        },
+        "fallback_at": 6,
+        "total_fallbacks": 18,
+        "survived": true
+      },
+      {
+        "tid": 3,
+        "served": 24,
+        "mismatch": 0,
+        "rtt_ms": {
+          "n": 24,
+          "p50": 18.413,
+          "min": 17.912,
+          "max": 23.702,
+          "mean": 19.082
+        },
+        "fallback_at": null,
+        "total_fallbacks": 0,
+        "survived": true
+      },
+      {
+        "tid": 4,
+        "served": 24,
+        "mismatch": 0,
+        "rtt_ms": {
+          "n": 24,
+          "p50": 19.871,
+          "min": 18.992,
+          "max": 25.149,
+          "mean": 20.529
+        },
+        "fallback_at": null,
+        "total_fallbacks": 0,
+        "survived": true
+      }
+    ]
+  },
+  "checks": {
+    "victim_degraded_not_died": true,
+    "healthy_tenants_zero_fallback": true,
+    "healthy_tenants_zero_mismatch": true,
+    "healthy_tenants_fully_served": true,
+    "all_streams_completed": true,
+    "batch_scaling_visible": true
+  }
+}
