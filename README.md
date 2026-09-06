@@ -49,7 +49,7 @@
 ## 目录结构
 
 ```
-ganglion/
+Ganglion/                # 仓库根目录（clone 后本目录即工作目录）
   abi.py             # HostContract / ModuleManifest / negotiate() + 5 种原因码
   transport.py       # shm 双槽 / Pipe / TCP 通道 + GPU(D2H/H2D) 变体基准
   host.py            # 宿主：骨干插桩 / 看门狗 / 恒等回退门 / token 原子换挡 / 逐 token trace
@@ -67,15 +67,21 @@ ganglion/
 ## 快速开始
 
 ```bash
-# 运行完整验证（约 2 分钟）
-python ganglion/run_validation.py
+# 运行完整验证（约 2 分钟；在仓库根目录下执行）
+python run_validation.py
 
 # 只跑单元测试
-python ganglion/test_ganglion.py
+python test_ganglion.py
 ```
 
 依赖：Python 3.12+，numpy，torch（GPU 可选——S4 的 GPU 变体自动跳过）。
 
 ## 许可与引用
 
-实验代码与论文草稿仅供研究使用。引用格式见论文草稿 §1。
+本仓库以 [Apache License 2.0](LICENSE) 发布（含专利授权条款）。引用格式见论文草稿 §1。
+
+## 已验证边界（诚实声明）
+
+- **已验证的终端形态**：笔记本级（RTX 4060，Python 3.12 + numpy 模块进程，跨公网 SSH 隧道）
+- **架构推算、尚未实测**：协议端点的资源需求仅为一条 TCP 连接 + 16KB/帧缓冲，原则上可投影至微控制器级终端——但当前实现依赖 Python 运行时，MCU 移植需要 C 固件重写协议端点（roadmap，未验证）
+- **延迟预算**：当前实现为逐 token 同步往返（S5 实测 RTT p50 8.34ms，占每 token 总成本约 19%）；一条 24 token 规划的端到端延迟 ≈ 1.0s，适用于 ≥1s 决策周期的场景。亚秒级反射控制必须留在本地反射层，不上云
