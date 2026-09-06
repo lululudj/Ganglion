@@ -1,0 +1,15 @@
+{
+  "M1_linear": {
+    "r2_closed_form": 1.0,
+    "r2_mlp": -0.02778
+  },
+  "M2_sensor": {
+    "r2_closed_form": 0.299931,
+    "r2_mlp": 0.253494
+  },
+  "M3_nonlinear": {
+    "r2_closed_form": 1.0,
+    "r2_mlp": 0.779312
+  },
+  "verdict": "PASS"
+}
