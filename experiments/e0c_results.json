@@ -1,0 +1,16 @@
+{
+  "smoke": {
+    "A_gap": 0.4083,
+    "B_gap": -0.0083,
+    "pass": true
+  },
+  "real": {
+    "real": 0.9286,
+    "shuffled": 0.4286,
+    "h_only": 0.5714,
+    "gap_rs": 0.5,
+    "gap_rh": 0.3571,
+    "sensor": "PRIVILEGED",
+    "module": "INJECTS"
+  }
+}
