@@ -1,0 +1,36 @@
+{
+  "M1_linear_h5p2": {
+    "r2_h_alone": 1.0,
+    "r2_s_alone": -0.0057,
+    "r2_additive": 1.0,
+    "r2_full_interaction": 1.0,
+    "r2_mlp_test": -0.0668,
+    "interaction_variance": 0.0,
+    "residual_variance": 0.0,
+    "privileged_pct": 0,
+    "information": "CLOSED"
+  },
+  "M2_sensor_h1ps": {
+    "r2_h_alone": 0.1553,
+    "r2_s_alone": 0.6896,
+    "r2_additive": 0.9105,
+    "r2_full_interaction": 1.0,
+    "r2_mlp_test": 0.1526,
+    "interaction_variance": 0.0895,
+    "residual_variance": 0.0,
+    "privileged_pct": 0.8447,
+    "information": "OPEN"
+  },
+  "M3_nonlinear_mlp": {
+    "r2_h_alone": 1.0,
+    "r2_s_alone": -0.0033,
+    "r2_additive": 1.0,
+    "r2_full_interaction": 1.0,
+    "r2_mlp_test": 0.7702,
+    "interaction_variance": 0.0,
+    "residual_variance": 0.0,
+    "privileged_pct": 0.2298,
+    "information": "OPEN"
+  },
+  "verdict": "PARTIAL: linear confirmed closed, but M3 needs investigation."
+}
