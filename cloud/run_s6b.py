@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """停验证器 → 上传并运行 s6b 同机投机解码。"""
+import os
 import sys
 import time
 
@@ -11,7 +12,7 @@ if hasattr(sys.stdout, "reconfigure"):
 cli = paramiko.SSHClient()
 cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 cli.connect("connect.bjb1.seetacloud.com", port=12920, username="root",
-            password="***REMOVED-SSH-PASSWORD***", timeout=20)
+            password=os.environ["GANGLION_SSH_PASS"], timeout=20)
 
 # 正则技巧停掉验证器（避免 pkill 自杀）
 _, o, _ = cli.exec_command("pkill -f 's6_veri[f]ier'; sleep 2; "

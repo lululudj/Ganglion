@@ -12,6 +12,7 @@
   2. accept 转发信道，直接在信道上跑模块服务循环（帧协议：4字节长度前缀）
   3. 逐次记录往返延迟，收到 STOP 帧后打印统计
 """
+import os
 import socket
 import struct
 import sys
@@ -24,7 +25,7 @@ import paramiko
 HOST = "connect.bjb1.seetacloud.com"
 PORT = 12920
 USER = "root"
-PASSWORD = "***REMOVED-SSH-PASSWORD***"
+PASSWORD = os.environ["GANGLION_SSH_PASS"]
 REMOTE_PORT = 19002
 
 DIM = 4096             # Qwen3-8B hidden_size（每帧 16KB fp32）

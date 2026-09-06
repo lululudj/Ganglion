@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """S5 跨机实验编排器：本地模块服务(后台) + 云端8B宿主 + 结果回收。"""
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -14,7 +15,7 @@ if hasattr(sys.stdout, "reconfigure"):
 HOST = "connect.bjb1.seetacloud.com"
 PORT = 12920
 USER = "root"
-PASSWORD = "***REMOVED-SSH-PASSWORD***"
+PASSWORD = os.environ["GANGLION_SSH_PASS"]
 
 # ---------- 1. 本地模块服务后台启动 ----------
 proc = subprocess.Popen(

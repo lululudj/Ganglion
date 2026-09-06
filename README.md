@@ -61,6 +61,7 @@ Ganglion/                # 仓库根目录（clone 后本目录即工作目录�
   PAPER_GANGLION_CN.md  # 论文草稿（中文版，v0.3 含 S7 多租户共享云端）
   PAPER_GANGLION_EN.md  # Paper draft (English, v0.3 with §5.5 multi-tenant shared cloud)
   cloud/             # S5/S6/S7 跨机实验：云端 8B 宿主 + 本地模块/起草器 + 全部结果 JSON
+  s11/               # S11 MCU 实验：ESP32-S3 固件 + 桥接器 + 真机结果（SSH 凭证经环境变量注入）
   demo/              # 机器人交互演示（单机 + swarm 双主题 × 中英双语）
 ```
 
@@ -82,6 +83,6 @@ python test_ganglion.py
 
 ## 已验证边界（诚实声明）
 
-- **已验证的终端形态**：笔记本级（RTX 4060，Python 3.12 + numpy 模块进程，跨公网 SSH 隧道）
-- **架构推算、尚未实测**：协议端点的资源需求仅为一条 TCP 连接 + 16KB/帧缓冲，原则上可投影至微控制器级终端——但当前实现依赖 Python 运行时，MCU 移植需要 C 固件重写协议端点（roadmap，未验证）
-- **延迟预算**：当前实现为逐 token 同步往返（S5 实测 RTT p50 8.34ms，占每 token 总成本约 19%）；一条 24 token 规划的端到端延迟 ≈ 1.0s，适用于 ≥1s 决策周期的场景。亚秒级反射控制必须留在本地反射层，不上云
+- **已验证的终端形态**：笔记本级（RTX 4060，Python 模块进程，跨公网 SSH 隧道，实测吞吐损耗 2.7%）；**微控制器级（S11）**：ESP32-S3（双核 240MHz、8MB PSRAM、USB-Serial/JTAG），C++ 固件实现完整模块协议端点——48/48 token 位级精确、零降级、kill 注入后精确恒等降级（fail-closed 语义在 MCU 上同样成立）
+- **S11 的延迟代价**：USB-CDC 传输 + 主机侧分块限速（绕开 HWCDC RX 溢出）使模块 RTT p50 ≈ 331ms（对比 S5 numpy 模块的 8.3ms）——这是当前 USB 传输路径的工程开销，非架构极限；WiFi TCP 与 TinyUSB CDC 是已明确的优化路径（固件已支持，未实测）
+- **固件层面三个实测发现**：① ESP32-S3 USB-Serial/JTAG 外设在持续大块流下丢字节（RX 环形缓冲溢出），需请求-响应整帧收发 + 主机分块限速；② Xtensa 编译器会把 `h*5+2` 收缩为单次舍入 FMA（与 numpy 两次舍入差 1 ULP，~20% 元素），固件需显式两步舍入对齐参考实现；③ `readBytes` 忙等会饿死 idle 任务触发 Task WDT 中途重启（表现为响应流混入 HELLO），等待路径必须 `delay(1)` 让出 CPU

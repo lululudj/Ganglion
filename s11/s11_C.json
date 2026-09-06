@@ -1,0 +1,35 @@
+{
+  "model": "/root/autodl-tmp/Qwen3-8B",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "tap_layer": 16,
+  "prompt": "The theory of external neural modules states that",
+  "transform": "h*5.0+2.0",
+  "phase": "C",
+  "A_baseline": {
+    "n_tokens": 24,
+    "tok_per_s": 23.79,
+    "step_ms": {
+      "n": 24,
+      "p50": 23.521,
+      "p95": 38.741,
+      "min": 23.395,
+      "max": 447.032,
+      "mean": 42.019
+    },
+    "text": " the brain is not a single, unified system but rather a collection of specialize"
+  },
+  "C_fault": {
+    "n_tokens": 24,
+    "kill_after": 6,
+    "fallback_at": 6,
+    "total_fallbacks": 18,
+    "served": 6,
+    "mismatch": 0,
+    "text_len": 135,
+    "text": " the brain is divided into different modules, each responsible for a specific fu"
+  },
+  "checks": {
+    "degraded_not_died": true,
+    "generation_completed": true
+  }
+}

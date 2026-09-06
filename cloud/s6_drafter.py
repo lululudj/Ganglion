@@ -7,6 +7,7 @@
 产出 s6_results.json：云端单独 vs 跨机投机解码 的 tok/s 对比 + 耗时分解。
 """
 import json
+import os
 import socket
 import struct
 import sys
@@ -19,7 +20,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 HOST = "connect.bjb1.seetacloud.com"
 SSH_PORT = 12920
 USER = "root"
-PASSWORD = "***REMOVED-SSH-PASSWORD***"
+PASSWORD = os.environ["GANGLION_SSH_PASS"]
 VERIFIER_PORT = 19003          # 云端本地端口（经 direct-tcpip 到达）
 
 DRAFT_MODEL = "Qwen/Qwen3-0.6B"    # 本地缓存（hf-mirror 已下载）

@@ -18,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HOST = "connect.bjb1.seetacloud.com"
 PORT = 12920
 USER = "root"
-PASSWORD = "***REMOVED-SSH-PASSWORD***"
+PASSWORD = os.environ["GANGLION_SSH_PASS"]
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")

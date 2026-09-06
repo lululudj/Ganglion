@@ -12,6 +12,7 @@
 HELLO 帧：连接后本地端立刻发送 struct('i', tenant_id)
 控制命令：ARM:<tenant>:<after_frames> → 回复 OK
 """
+import os
 import socket
 import struct
 import sys
@@ -24,7 +25,7 @@ import paramiko
 HOST = "connect.bjb1.seetacloud.com"
 PORT = 12920
 USER = "root"
-PASSWORD = "***REMOVED-SSH-PASSWORD***"
+PASSWORD = os.environ["GANGLION_SSH_PASS"]
 DATA_PORT = 19002
 CTRL_PORT = 19003
 
