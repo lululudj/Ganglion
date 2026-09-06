@@ -212,7 +212,7 @@ const RCOLOR={R1:'#b369ff',R2:'#ffd76e',R3:'#6ee7ff'};
 const ROBOT_DEF=[
   {id:'R1',policy:'A',start:{c:1.5,r:9}},
   {id:'R2',policy:'B',start:{c:2,r:3}},
-  {id:'R3',policy:'A',start:{c:2,r:15}},
+  {id:'R3',policy:'A',start:{c:1.5,r:12}},
 ];
 let obstacles=[],dangers=[];
 
@@ -292,17 +292,38 @@ function plan(rb){
 /* ============ 反射层 ============ */
 function reflexSteer(rb){
   const tx=(rb.target.c+.5)*CELL,ty=(rb.target.r+.5)*CELL;
-  let ang=Math.atan2(ty-rb.y,tx-rb.x);
+  const rc=rb.x/CELL-0.5,rr=rb.y/CELL-0.5;
+  // 若身在危险区，优先逃离（朝最近危险中心反方向），而非朝目标
+  let escapeAng=null;
+  for(const d of dangers){
+    if(Math.hypot(rc-d.cx,rr-d.cy)<d.r+0.3){
+      escapeAng=Math.atan2(rr-d.cy,rc-d.cx);break;
+    }
+  }
+  let ang=escapeAng!==null?escapeAng:Math.atan2(ty-rb.y,tx-rb.x);
   const look=CELL*1.6;
   const probe=(a)=>{const px=rb.x+Math.cos(a)*look,py=rb.y+Math.sin(a)*look;
     return blocked(Math.floor(px/CELL),Math.floor(py/CELL))||inDanger(px/CELL-0.5,py/CELL-0.5,-0.3);};
-  if(probe(ang)){
+  // 贴墙跟随：已选定转向则持续若干帧不重算，避免左右探测交替→画圈
+  if(rb.committedTurn>0){
+    ang += rb.turnDir*(30+rb.committedTurn*8)*Math.PI/180;
+    rb.committedTurn--;
+  }else if(probe(ang)){
+    let chosen=null;
     for(let t=30;t<=180;t+=25){
-      if(!probe(ang+t*Math.PI/180)){ang+=t*Math.PI/180;break;}
-      if(!probe(ang-t*Math.PI/180)){ang-=t*Math.PI/180;break;}
+      if(!probe(ang+t*Math.PI/180)){chosen=t;break;}
+      if(!probe(ang-t*Math.PI/180)){chosen=-t;break;}
+    }
+    if(chosen!==null){
+      ang+=chosen*Math.PI/180;
+      rb.turnDir=chosen>0?1:-1;
+      rb.committedTurn=8;
+    }else{
+      ang+=(Math.random()<.5?1:-1)*Math.PI*(0.7+Math.random()*0.6);
+      rb.committedTurn=12;rb.turnDir=1;
     }
   }
-  rb.ang+=(function(a,b){let d=a-b;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;})(ang,rb.ang)*.25;
+  rb.ang+=(function(a,b){let d=a-b;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;})(ang,rb.ang)*.3;
   return{vx:Math.cos(rb.ang),vy:Math.sin(rb.ang)};
 }
 
@@ -373,8 +394,17 @@ function move(dt){
       const s=reflexSteer(rb);vx=s.vx;vy=s.vy;
       const nx=rb.x+vx*2,ny=rb.y+vy*2;
       if(blocked(Math.floor(nx/CELL),Math.floor(ny/CELL)))rb.stuck=(rb.stuck||0)+1;
-      if(rb.stuck>26){rb.ang+=Math.PI*(0.5+Math.random());rb.stuck=0;}
+      else rb.stuck=Math.max(0,(rb.stuck||0)-2);
+      if(rb.stuck>18){rb.ang+=Math.PI*(0.6+Math.random()*0.5);rb.stuck=0;rb.committedTurn=0;}
     }else rb.stuck=0;
+    // 位置历史卡滞检测：最近40帧活动半径<50px则强制大转向（覆盖画圈/贴墙卡死）
+    rb.posHist.push({x:rb.x,y:rb.y});
+    if(rb.posHist.length>40)rb.posHist.shift();
+    if(rb.posHist.length>=30){
+      const xs=rb.posHist.map(p=>p.x),ys=rb.posHist.map(p=>p.y);
+      const span=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys));
+      if(span<50){rb.ang+=Math.PI*(0.7+Math.random()*0.6);rb.committedTurn=10;rb.posHist=[];}
+    }
     rb.x+=vx*1.75;rb.y+=vy*1.75;
     rb.x=Math.max(12,Math.min(COLS*CELL-12,rb.x));
     rb.y=Math.max(12,Math.min(ROWS*CELL-12,rb.y));
@@ -565,6 +595,7 @@ function initRobots(){
     id:def.id,policy:def.policy,
     x:def.start.c*CELL,y:def.start.r*CELL,ang:0,
     target:null,trail:[],stuck:0,
+    committedTurn:0,turnDir:1,posHist:[],
     module:false,alive:false,
     serving:'PT',rtt:null,
     stats:{mod:0,fb:0,pt:0},

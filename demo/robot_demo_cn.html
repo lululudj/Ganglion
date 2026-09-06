@@ -205,7 +205,7 @@
 /* ============ 实验状态 ============ */
 const COLS=30, ROWS=18, CELL=30;
 const S={
-  robot:{x:60,y:270,ang:0},
+  robot:{x:60,y:270,ang:0,stuck:0,committedTurn:0,turnDir:1,posHist:[]},
   target:null, targetCount:0,
   obstacles:[], dangers:[],
   activeModule:null,        // 'A' | 'B' | null
@@ -306,18 +306,36 @@ function plan(policy){
 /* ============ 反射层（本地基线：不规划，只躲）============ */
 function reflexSteer(){
   const tx=(S.target.c+.5)*CELL,ty=(S.target.r+.5)*CELL;
-  let ang=Math.atan2(ty-S.robot.y,tx-S.robot.x);
-  // 前视探测：撞墙就转向
+  const rc=S.robot.x/CELL-0.5,rr=S.robot.y/CELL-0.5;
+  // 身在危险区则优先逃离，而非朝目标
+  let escapeAng=null;
+  for(const d of dangers){
+    if(Math.hypot(rc-d.cx,rr-d.cy)<d.r+0.3){escapeAng=Math.atan2(rr-d.cy,rc-d.cx);break;}
+  }
+  let ang=escapeAng!==null?escapeAng:Math.atan2(ty-S.robot.y,tx-S.robot.x);
   const look=CELL*1.6;
   const probe=(a)=>{const px=S.robot.x+Math.cos(a)*look,py=S.robot.y+Math.sin(a)*look;
     return blocked(Math.floor(px/CELL),Math.floor(py/CELL))||inDanger(px/CELL-0.5,py/CELL-0.5,-0.3);};
-  if(probe(ang)){
+  // 贴墙跟随：选定转向后持续若干帧，避免左右探测交替→画圈
+  if(S.robot.committedTurn>0){
+    ang+=S.robot.turnDir*(30+S.robot.committedTurn*8)*Math.PI/180;
+    S.robot.committedTurn--;
+  }else if(probe(ang)){
+    let chosen=null;
     for(let t=30;t<=180;t+=25){
-      if(!probe(ang+t*Math.PI/180)){ang+=t*Math.PI/180;break;}
-      if(!probe(ang-t*Math.PI/180)){ang-=t*Math.PI/180;break;}
+      if(!probe(ang+t*Math.PI/180)){chosen=t;break;}
+      if(!probe(ang-t*Math.PI/180)){chosen=-t;break;}
+    }
+    if(chosen!==null){
+      ang+=chosen*Math.PI/180;
+      S.robot.turnDir=chosen>0?1:-1;
+      S.robot.committedTurn=8;
+    }else{
+      ang+=(Math.random()<.5?1:-1)*Math.PI*(0.7+Math.random()*0.6);
+      S.robot.committedTurn=12;S.robot.turnDir=1;
     }
   }
-  S.robot.ang+=(function(a,b){let d=a-b;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;})(ang,S.robot.ang)*.25;
+  S.robot.ang+=(function(a,b){let d=a-b;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d;})(ang,S.robot.ang)*.3;
   return{vx:Math.cos(S.robot.ang),vy:Math.sin(S.robot.ang)};
 }
 
@@ -400,10 +418,19 @@ function move(dt){
     // 检测卡死
     const nx=S.robot.x+vx*2,ny=S.robot.y+vy*2;
     if(blocked(Math.floor(nx/CELL),Math.floor(ny/CELL)))stuckTicks++;
-    if(stuckTicks>26){ // 本地反射也会挣脱（简单随机重定向）
-      S.robot.ang+=Math.PI*(0.5+Math.random());
-      stuckTicks=0;
+    else stuckTicks=Math.max(0,stuckTicks-2);
+    if(stuckTicks>18){ // 挣脱：随机大角度转向并清除贴墙锁定
+      S.robot.ang+=Math.PI*(0.6+Math.random()*0.5);
+      stuckTicks=0;S.robot.committedTurn=0;
     }
+  }
+  // 位置历史卡滞检测：最近40帧活动半径<50px则强制转向
+  S.robot.posHist.push({x:S.robot.x,y:S.robot.y});
+  if(S.robot.posHist.length>40)S.robot.posHist.shift();
+  if(S.robot.posHist.length>=30){
+    const xs=S.robot.posHist.map(p=>p.x),ys=S.robot.posHist.map(p=>p.y);
+    const span=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys));
+    if(span<50){S.robot.ang+=Math.PI*(0.7+Math.random()*0.6);S.robot.committedTurn=10;S.robot.posHist=[];}
   }
   const sp=1.9;
   S.robot.x+=vx*sp;S.robot.y+=vy*sp;
