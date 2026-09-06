@@ -2,7 +2,7 @@
 
 ## Status
 
-The first cloud run is now treated as **E1-v1 (lookup-channel audit)**. It established that the tap-layer tensor can carry class information, but it did **not** establish external computation. E1-v2 adds the decisive `sensor_permuted` and `raw_onehot` controls.
+The first cloud run is now treated as **E1-v1 (lookup-channel audit)**. It established that the tap-layer tensor can carry class information, but it did **not** establish external computation. E1-v2 has now completed the decisive `sensor_permuted` and `raw_onehot` controls.
 
 ## E1-v1 result
 
@@ -43,4 +43,27 @@ The default run now uses five seeds. The decision separately reports:
 2. whether Real depends on the module, using `no_module_accuracy`;
 3. whether Real beats the raw one-hot projection, which would be evidence of external computation rather than mere bandwidth.
 
-Raw JSON is in `cloud/e1_cloud_results.json`; the executable is `cloud/cloud_host_e1.py`.
+E1-v1 raw JSON is in `cloud/e1_cloud_results.json`; the executable is `cloud/cloud_host_e1.py`.
+
+## E1-v2 result
+
+Qwen3-8B, one RTX 4090, five seeds, 64 training and 64 held-out examples per seed, 12 epochs, matched one-token labels and token budget.
+
+| Arm | Module-active accuracy | Module-removed accuracy | Per-seed module-active |
+|---|---:|---:|---|
+| Real | **1.0000** | 0.2969 | 1.0000, 1.0000, 1.0000, 1.0000, 1.0000 |
+| Sensor-permuted | 0.3406 | 0.2938 | 0.1875, 0.4375, 0.7969, 0.0000, 0.2813 |
+| Raw one-hot | **1.0000** | 0.2031 | 1.0000, 1.0000, 1.0000, 1.0000, 1.0000 |
+| Trajectory-only | 0.1563 | 0.2156 | 0.1875, 0.0000, 0.2031, 0.1094, 0.2813 |
+
+Chance was `0.2500`.
+
+Key gaps:
+
+- Real minus sensor-permuted: **+0.6594**
+- Real minus trajectory-only: **+0.8438**
+- Real minus raw one-hot: **0.0000**
+
+Therefore, the correctly paired class-basis tensor is not explainable by fine-tuning alone or output-level supervision. However, the fixed one-hot projection also reaches `1.0000`, and Real drops to `0.2969` when its module is removed. This confirms that the current external module is functioning as a **learned encoding channel**, not as external computation. In plain terms: the brain can receive the signal, but the cartridge did no useful computation beyond re-encoding the sensor value.
+
+Raw JSON is in `cloud/e1_cloud_results_v2.json`.
