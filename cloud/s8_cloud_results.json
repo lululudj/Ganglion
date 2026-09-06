@@ -1,0 +1,30 @@
+{
+  "model": "/root/autodl-tmp/Qwen3-8B",
+  "tap_layer": 16,
+  "scale": 5.0,
+  "shift": 2.0,
+  "target": " characterized by distributed specialized processing units that operate independently",
+  "baseline_text": "the brain is not a single, unified system but rather a collection of specialized modules that are responsible for different functions. These",
+  "module_text_before": "the brain is divided into different modules, which are responsible for different functions. The theory is based on the idea that the",
+  "module_changes_output_before": true,
+  "training": {
+    "epochs": 30,
+    "lr": 0.0005,
+    "lora_r": 8,
+    "loss_start": 5.4897,
+    "loss_end": 0.0945
+  },
+  "module_text_after": "characterized by characterized by characterized by characterized by characterized by characterized by characterized by characterized by characterized by characterized by characterized by characterized by",
+  "target_overlap_before": 0.1111,
+  "target_overlap_after": 0.2222,
+  "baseline_after_text": "characterized by distributed specialized processing units that operate independently of the brain, such as tools, technologies, and cultural practices. These",
+  "baseline_preserved": false,
+  "assertions": {
+    "A1_module_changes": true,
+    "A2_target_improved": true,
+    "A3_baseline_preserved": false,
+    "A4_loss_decreased": true,
+    "all_pass": false
+  },
+  "elapsed_s": 14.3
+}
