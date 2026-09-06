@@ -12,7 +12,7 @@ Module-active and module-removed accuracy were both logged:
 
 | Arm | Module active | Module removed |
 |---|---:|---:|
-| Real | **1.0000** | **0.2417** |
+| Real | **1.0000** | **0.2396** |
 | Permuted | 0.5365 | 0.2813 |
 | Self-distill | 0.0000 | 0.0000 |
 | Trajectory-only | 0.2292 | 0.2292 |
