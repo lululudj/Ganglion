@@ -1,37 +1,46 @@
 # E1 Cloud Attribution Ablation
 
-## Question
+## Status
 
-Does the ABI tensor help because it is correctly paired with the task outcome, or is the improvement just ordinary fine-tuning?
+The first cloud run is now treated as **E1-v1 (lookup-channel audit)**. It established that the tap-layer tensor can carry class information, but it did **not** establish external computation. E1-v2 adds the decisive `sensor_permuted` and `raw_onehot` controls.
 
-## Setup
+## E1-v1 result
 
-The cloud backbone was Qwen3-8B on one RTX 4090. The prompt was neutral and did not reveal the answer. A sensor value selected one of four answer tokens. The external module wrote an orthogonal class-direction tensor into the tap-layer hidden state. The LoRA was applied to `q_proj` and `v_proj` from layer 16 upward.
+The cloud model was Qwen3-8B on one RTX 4090. The prompt was neutral. A sensor value selected one of four answer tokens, and the module wrote a class-direction tensor at tap layer 16.
 
-Four arms used the same token budget and number of optimization steps:
+Module-active and module-removed accuracy were both logged:
 
-- **Real**: correct sensor-tensor/target pairing.
-- **Permuted**: sensor-tensor/target pairing destroyed, marginal distributions preserved.
-- **Self-distill**: no tensor; trained on the backbone's own output.
-- **Trajectory-only**: no tensor; output-level supervision only.
+| Arm | Module active | Module removed |
+|---|---:|---:|
+| Real | **1.0000** | **0.2417** |
+| Permuted | 0.5365 | 0.2813 |
+| Self-distill | 0.0000 | 0.0000 |
+| Trajectory-only | 0.2292 | 0.2292 |
 
-## Result
+Chance was `0.2500`. Therefore, Real did **not** bypass the tensor: removing it dropped from `1.0000` to chance. The tensor channel is real.
 
-Held-out sensor-conditioned next-token accuracy over three seeds:
+However, the module was a lookup table:
 
-| Arm | Mean | Std | Runs |
-|---|---:|---:|---|
-| Real | **1.0000** | 0.0000 | 1.0000, 1.0000, 1.0000 |
-| Permuted | 0.5365 | 0.2565 | 0.1875, 0.6250, 0.7969 |
-| Self-distill | 0.0000 | 0.0000 | 0.0000, 0.0000, 0.0000 |
-| Trajectory-only | 0.2292 | 0.0483 | 0.1875, 0.2969, 0.2031 |
+```python
+classes = torch.clamp((sensor_values * N_CLASSES).long(), max=N_CLASSES - 1)
+delta = self.vector[classes]
+```
 
-Chance was 0.2500.
+So E1-v1 proves **transmission/encoding**, not computation or capability injection. The self-distill `0.0000` was also an artifact of training the model toward a token outside the four-answer set; that arm was removed.
 
-## Interpretation
+The old `permuted` arm permuted labels while keeping the tensor truthful. That measured whether the model trusts tensor over conflicting labels. The decisive control is to permute the tensor input while keeping labels correct.
 
-The Real minus Permuted gap was **0.4635**, and the Real minus Trajectory-only gap was **0.7708**. This passes the primary E1 criterion: the paired ABI tensor carried task-relevant information beyond the marginal distributions and beyond output-level supervision.
+## E1-v2 controls
 
-The Permuted arm's high variance is expected: it sometimes learns the permutation residual, but has no stable causal pairing. The Self-distill arm's zero confirms that merely fine-tuning the backbone does not solve the sensor-only task.
+- `real`: correct tensor and correct labels.
+- `sensor_permuted`: tensor is encoded from the wrong sensor value, labels remain correct.
+- `raw_onehot`: a fixed one-hot projection at the same tensor norm, without the external module's class basis. If this also reaches Real-level accuracy, the module is a no-op in the information chain.
+- `trajectory_only`: output-level labels only.
 
-This is an attribution experiment with a deliberately compressed class-coded tensor. It supports the E1 mechanism; it does not yet claim natural robot-scale data, cross-embodiment transfer, or long-horizon stability.
+The default run now uses five seeds. The decision separately reports:
+
+1. whether the correctly paired tensor beats the incorrectly paired tensor;
+2. whether Real depends on the module, using `no_module_accuracy`;
+3. whether Real beats the raw one-hot projection, which would be evidence of external computation rather than mere bandwidth.
+
+Raw JSON is in `cloud/e1_cloud_results.json`; the executable is `cloud/cloud_host_e1.py`.

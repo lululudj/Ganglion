@@ -38,10 +38,10 @@ def parse_args():
     parser.add_argument("--train-samples", type=int, default=64)
     parser.add_argument("--eval-samples", type=int, default=64)
     parser.add_argument("--epochs", type=int, default=12)
-    parser.add_argument("--seeds", type=int, default=3)
+    parser.add_argument("--seeds", type=int, default=5)
     parser.add_argument("--base-seed", type=int, default=2026)
     parser.add_argument("--quick", action="store_true")
-    parser.add_argument("--arms", default="real,permuted,self_distill,trajectory_only")
+    parser.add_argument("--arms", default="real,sensor_permuted,raw_onehot,trajectory_only")
     parser.add_argument("--output", default="/root/e1_cloud_results.json")
     args = parser.parse_args()
     if args.quick:
@@ -93,20 +93,23 @@ def register_hook(model, vector, prompt_len, sensor=None):
     return hook, handle
 
 
-def compute_reference_vector(model, tokenizer, device):
+def compute_reference_vectors(model, tokenizer, device):
     inputs = encode_prompt(tokenizer).to(device)
     with torch.no_grad():
         output = model(input_ids=inputs, output_hidden_states=True, use_cache=False)
     reference = output.hidden_states[TAP_LAYER + 1][0, -1, :]
     rms = reference.pow(2).mean().sqrt().item()
     generator = torch.Generator(device="cpu").manual_seed(7391)
-    vector = torch.randn(reference.shape[0], generator=generator)
-    vector /= vector.norm()
-    vector *= math.sqrt(reference.shape[0])
     basis = torch.randn(N_CLASSES, reference.shape[0], generator=generator)
     basis /= basis.norm(dim=1, keepdim=True)
     basis *= math.sqrt(reference.shape[0]) * rms * TENSOR_SCALE
-    return basis.to(device=device, dtype=model.dtype), rms
+    class_basis = basis.to(device=device, dtype=model.dtype)
+
+    raw_basis = torch.zeros(N_CLASSES, reference.shape[0])
+    raw_basis[torch.arange(N_CLASSES), torch.arange(N_CLASSES)] = 1.0
+    raw_basis *= math.sqrt(reference.shape[0]) * rms * TENSOR_SCALE
+    raw_basis = raw_basis.to(device=device, dtype=model.dtype)
+    return class_basis, raw_basis, rms
 
 
 def make_model(model_path, device):
@@ -118,7 +121,7 @@ def make_model(model_path, device):
     )
 
 
-def train_arm(model, tokenizer, arm, sensors, labels, device, epochs, lr):
+def train_arm(model, tokenizer, arm, sensors, hook_sensors, labels, class_vector, raw_vector, device, epochs, lr):
     prompt_ids = encode_prompt(tokenizer).to(device)
     prompt_len = prompt_ids.shape[1]
     target_ids = [
@@ -129,16 +132,7 @@ def train_arm(model, tokenizer, arm, sensors, labels, device, epochs, lr):
     if len(target_lengths) != 1 or next(iter(target_lengths)) != 1:
         raise RuntimeError(f"Target labels must be exactly one token, got {target_lengths}")
 
-    if arm == "self_distill":
-        target_token_ids = []
-        model.eval()
-        with torch.no_grad():
-            for start in range(0, len(sensors), BATCH_SIZE):
-                batch = prompt_ids.expand(min(BATCH_SIZE, len(sensors) - start), -1).contiguous()
-                logits = model(input_ids=batch, use_cache=False).logits[:, -1, :]
-                target_token_ids.extend(logits.argmax(-1).tolist())
-    else:
-        target_token_ids = [target.item() for target in target_ids]
+    target_token_ids = [target.item() for target in target_ids]
 
     full_ids = torch.cat(
         [prompt_ids.expand(len(sensors), -1),
@@ -149,8 +143,13 @@ def train_arm(model, tokenizer, arm, sensors, labels, device, epochs, lr):
     full_labels[:, :prompt_len] = -100
 
     hook, handle = None, None
-    if arm in {"real", "permuted"}:
-        hook, handle = register_hook(model, model._ganglion_vector, prompt_len)
+    train_vector = None
+    if arm in {"real", "sensor_permuted"}:
+        train_vector = class_vector
+    elif arm == "raw_onehot":
+        train_vector = raw_vector
+    if train_vector is not None:
+        hook, handle = register_hook(model, train_vector, prompt_len, hook_sensors)
 
     optimizer = torch.optim.AdamW(
         [parameter for parameter in model.parameters() if parameter.requires_grad],
@@ -166,7 +165,7 @@ def train_arm(model, tokenizer, arm, sensors, labels, device, epochs, lr):
             batch_indices = order[start:start + BATCH_SIZE]
             optimizer.zero_grad(set_to_none=True)
             if hook is not None:
-                hook.sensor = sensors[batch_indices].to(device)
+                hook.sensor = hook_sensors[batch_indices].to(device)
             input_batch = full_ids[batch_indices]
             label_batch = full_labels[batch_indices]
             output = model(input_ids=input_batch, labels=label_batch, use_cache=False)
@@ -218,7 +217,7 @@ def mean_std(values):
 def main():
     args = parse_args()
     requested_arms = [arm.strip() for arm in args.arms.split(",") if arm.strip()]
-    valid_arms = {"real", "permuted", "self_distill", "trajectory_only"}
+    valid_arms = {"real", "sensor_permuted", "raw_onehot", "trajectory_only"}
     if set(requested_arms) - valid_arms:
         raise ValueError(f"Unknown arms: {set(requested_arms) - valid_arms}")
 
@@ -229,27 +228,26 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     model = make_model(MODEL_PATH, device)
     model.eval()
-    vector, hidden_rms = compute_reference_vector(model, tokenizer, device)
-    print(f"[E1] reference hidden RMS={hidden_rms:.4f} delta RMS={vector.pow(2).mean().sqrt().item():.4f}", flush=True)
+    class_vector, raw_vector, hidden_rms = compute_reference_vectors(model, tokenizer, device)
+    delta_rms = class_vector.pow(2).mean().sqrt().item()
+    print(f"[E1] reference hidden RMS={hidden_rms:.4f} delta RMS={delta_rms:.4f}", flush=True)
 
     runs = []
     arm_accuracies = {arm: [] for arm in requested_arms}
+    arm_no_module_accuracies = {arm: [] for arm in requested_arms}
     for seed_index in range(args.seeds):
         run_seed = args.base_seed + seed_index
         data_seed = 1000 + seed_index
         train_sensors, train_labels = make_dataset(args.train_samples, data_seed)
         eval_sensors, eval_labels = make_dataset(args.eval_samples, data_seed + 500)
         permutation = torch.randperm(len(train_sensors), generator=torch.Generator().manual_seed(data_seed + 900))
-        permuted_labels = [train_labels[index] for index in permutation]
+        permuted_sensors = train_sensors[permutation]
 
         for arm in requested_arms:
             print(f"\n[run {seed_index + 1}/{args.seeds}] arm={arm} seed={run_seed}", flush=True)
             torch.manual_seed(run_seed)
             torch.cuda.manual_seed_all(run_seed)
             random.seed(run_seed)
-            current_labels = train_labels
-            if arm == "permuted":
-                current_labels = permuted_labels
             peft_model = get_peft_model(
                 model,
                 LoraConfig(
@@ -262,23 +260,42 @@ def main():
                 ),
             )
             peft_model.print_trainable_parameters()
-            peft_model._ganglion_vector = vector
+            current_hook_sensors = train_sensors
+            if arm == "sensor_permuted":
+                current_hook_sensors = permuted_sensors
             losses = train_arm(
                 peft_model,
                 tokenizer,
                 arm,
                 train_sensors,
-                current_labels,
+                current_hook_sensors,
+                train_labels,
+                class_vector,
+                raw_vector,
                 device,
                 args.epochs,
                 LR,
             )
-            peft_model.eval()
+            eval_vector = class_vector
+            if arm == "raw_onehot":
+                eval_vector = raw_vector
             module_accuracy, predictions = evaluate_arm(
-                peft_model, tokenizer, vector, eval_sensors, eval_labels, device, module_active=True
+                peft_model,
+                tokenizer,
+                eval_vector,
+                eval_sensors,
+                eval_labels,
+                device,
+                module_active=True,
             )
             no_module_accuracy, _ = evaluate_arm(
-                peft_model, tokenizer, vector, eval_sensors, eval_labels, device, module_active=False
+                peft_model,
+                tokenizer,
+                eval_vector,
+                eval_sensors,
+                eval_labels,
+                device,
+                module_active=False,
             )
             print(
                 f"  loss {losses[0]:.4f} -> {losses[-1]:.4f}; "
@@ -295,6 +312,7 @@ def main():
                 "predictions": predictions if len(predictions) <= 64 else predictions[:64],
             })
             arm_accuracies[arm].append(module_accuracy)
+            arm_no_module_accuracies[arm].append(no_module_accuracy)
             peft_model = peft_model.unload()
             model = peft_model
             model.eval()
@@ -303,28 +321,60 @@ def main():
             torch.cuda.empty_cache()
 
     summary = {}
-    for arm, values in arm_accuracies.items():
-        mean, std = mean_std(values)
-        summary[arm] = {"accuracy_mean": mean, "accuracy_std": std, "runs": values}
+    for arm in requested_arms:
+        module_mean, module_std = mean_std(arm_accuracies[arm])
+        no_module_mean, no_module_std = mean_std(arm_no_module_accuracies[arm])
+        summary[arm] = {
+            "module_active_accuracy_mean": module_mean,
+            "module_active_accuracy_std": module_std,
+            "no_module_accuracy_mean": no_module_mean,
+            "no_module_accuracy_std": no_module_std,
+            "module_active_runs": arm_accuracies[arm],
+            "no_module_runs": arm_no_module_accuracies[arm],
+        }
     chance = 1.0 / N_CLASSES
     primary_gap = (
-        summary["real"]["accuracy_mean"] - summary["permuted"]["accuracy_mean"]
-        if "real" in summary and "permuted" in summary else None
+        summary["real"]["module_active_accuracy_mean"]
+        - summary["sensor_permuted"]["module_active_accuracy_mean"]
+        if "real" in summary and "sensor_permuted" in summary else None
     )
     trajectory_gap = (
-        summary["real"]["accuracy_mean"] - summary["trajectory_only"]["accuracy_mean"]
+        summary["real"]["module_active_accuracy_mean"]
+        - summary["trajectory_only"]["module_active_accuracy_mean"]
         if "real" in summary and "trajectory_only" in summary else None
+    )
+    raw_gap = (
+        summary["real"]["module_active_accuracy_mean"]
+        - summary["raw_onehot"]["module_active_accuracy_mean"]
+        if "real" in summary and "raw_onehot" in summary else None
+    )
+    abi_signal_effective = (
+        primary_gap is not None
+        and primary_gap >= 0.15
+        and summary["real"]["module_active_accuracy_mean"] > chance + 0.15
+        and summary["real"]["no_module_accuracy_mean"] <= chance + 0.10
+    )
+    module_is_noop = (
+        raw_gap is not None
+        and raw_gap <= 0.05
+        and summary["raw_onehot"]["module_active_accuracy_mean"] > chance + 0.15
+    )
+    conclusion = (
+        "PASS: paired class-basis tensor carries usable task information beyond permuted control; "
+        "raw-onehot also solves it, so this experiment supports bandwidth/encoding, not external computation."
+        if abi_signal_effective and module_is_noop
+        else "PASS: paired tensor signal carries usable task information beyond permuted and raw controls."
+        if abi_signal_effective
+        else "FAIL/NONDESCRIPT: paired tensor signal is not distinguishable from controls under this setup."
     )
     decision = {
         "chance_accuracy": chance,
-        "primary_gap_real_minus_permuted": primary_gap,
+        "primary_gap_real_minus_sensor_permuted": primary_gap,
         "real_minus_trajectory": trajectory_gap,
-        "abi_signal_effective": primary_gap >= 0.15 and summary["real"]["accuracy_mean"] > chance + 0.15,
-        "conclusion": (
-            "PASS: paired tensor signal carries usable task information beyond marginals."
-            if primary_gap >= 0.15 and summary["real"]["accuracy_mean"] > chance + 0.15
-            else "FAIL/NONDESCRIPT: paired tensor signal is not distinguishable from permuted control under this setup."
-        ),
+        "real_minus_raw_onehot": raw_gap,
+        "abi_signal_effective": abi_signal_effective,
+        "module_is_noop": module_is_noop,
+        "conclusion": conclusion,
     }
     results = {
         "experiment": "E1_cloud_attribution_ablation",
@@ -335,8 +385,8 @@ def main():
         "labels": LABELS,
         "tensor_scale": TENSOR_SCALE,
         "reference_hidden_rms": hidden_rms,
-        "delta_rms": vector.pow(2).mean().sqrt().item(),
-        "tensor_encoding": "orthogonal class basis directions with sensor-bucketed pairing",
+        "delta_rms": delta_rms,
+        "tensor_encoding": "class-basis lookup versus fixed one-hot projection at matched norm",
         "config": vars(args),
         "lora": {"r": LORA_R, "alpha": LORA_ALPHA, "lr": LR, "batch_size": BATCH_SIZE},
         "runs": runs,
@@ -350,7 +400,7 @@ def main():
     print(json.dumps(summary, indent=2))
     print(json.dumps(decision, indent=2))
     print(f"Results saved to {args.output}; elapsed={results['elapsed_s']}s", flush=True)
-    return decision["abi_signal_effective"]
+    return abi_signal_effective
 
 
 if __name__ == "__main__":
